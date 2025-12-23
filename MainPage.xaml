@@ -1,0 +1,295 @@
+﻿<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="KukiFinance.MainPage"
+             Title="Kukulski Finances">
+    <VerticalStackLayout Padding="40" Spacing="25" VerticalOptions="Center">
+        <Label Text="Kukulski Finances"
+               FontSize="32"
+               HorizontalOptions="Center" />
+
+        <!-- 5-column grid for main navigation -->
+        <Grid ColumnDefinitions="*,*,*,*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <!-- Column Headers -->
+            <Label Grid.Row="0" Grid.Column="0" Text="Summary" FontSize="20" FontAttributes="Bold" HorizontalOptions="Center"/>
+            <Label Grid.Row="0" Grid.Column="1" Text="Assets" FontSize="20" FontAttributes="Bold" HorizontalOptions="Center"/>
+            <Label Grid.Row="0" Grid.Column="2" Text="Cash" FontSize="20" FontAttributes="Bold" HorizontalOptions="Center"/>
+            <Label Grid.Row="0" Grid.Column="3" Text="Liabilities" FontSize="20" FontAttributes="Bold" HorizontalOptions="Center"/>
+            <Label Grid.Row="0" Grid.Column="4" Text="Tools" FontSize="20" FontAttributes="Bold" HorizontalOptions="Center"/>
+
+            <!-- Column 0: Summary -->
+            <Button Grid.Row="1" 
+                    Grid.Column="0" 
+                    Text="Finance Summary" 
+                    x:Name="FinanceSummaryButton" 
+                    BackgroundColor="LightYellow" 
+                    TextColor="Black" 
+                    FontSize="16" 
+                    HorizontalOptions="Fill" 
+                    Clicked="FinanceSummaryButton_Clicked" />
+            <Button Grid.Row="3" 
+                    Grid.Column="0" 
+                    Text="Expense Summary" 
+                    x:Name="ExpenseButton" 
+                    BackgroundColor="LightYellow" 
+                    TextColor="Black" 
+                    FontSize="16" 
+                    HorizontalOptions="Fill" 
+                    Clicked="ExpenseButton_Clicked" />
+            <Button Grid.Row="4" 
+                    Grid.Column="0" 
+                    Text="Average Expense Summary" 
+                    x:Name="AverageExpenseButton" 
+                    BackgroundColor="LightYellow" 
+                    TextColor="Black" 
+                    FontSize="16" 
+                    HorizontalOptions="Fill" 
+                    Clicked="AverageExpenseButton_Clicked" />
+            <Button Grid.Row="5" 
+                    Grid.Column="0" 
+                    Text="Cash Flow" 
+                    x:Name="CashFlowButton" 
+                    BackgroundColor="LightYellow" 
+                    TextColor="Black" 
+                    FontSize="16" 
+                    HorizontalOptions="Fill" 
+                    Clicked="CashFlowButton_Clicked" />
+            <Button Grid.Row="2" 
+                    Grid.Column="0" 
+                    Text="Calendar"
+                    x:Name="CalendarButton"
+                    BackgroundColor="LightYellow"
+                    TextColor="Black"
+                    FontSize="16"
+                    HorizontalOptions="Fill"
+                    Clicked="CalendarButton_Clicked" />
+            <!-- Add more as needed -->
+
+            <!-- Column 1: Assets -->
+            <Button Grid.Row="1" 
+                    Grid.Column="1" 
+                    Text="Midland" 
+                    BackgroundColor="LightBlue"  
+                    FontSize="16" TextColor="Black" 
+                    HorizontalOptions="Fill" 
+                    Clicked="MidlandButton_Clicked" />
+            <Button Grid.Row="2" 
+                    Grid.Column="1" 
+                    Text="Charles Schwab Contributory" 
+                    BackgroundColor="LightBlue" 
+                    FontSize="16" TextColor="Black" 
+                    HorizontalOptions="Fill" 
+                    Clicked="CharlesSchwabContributoryButton_Clicked" />
+            <Button Grid.Row="3" 
+                    Grid.Column="1" 
+                    Text="Charles Schwab Joint Tenant" 
+                    BackgroundColor="LightBlue" 
+                    FontSize="16" TextColor="Black" 
+                    HorizontalOptions="Fill" 
+                    Clicked="CharlesSchwabJointTenantButton_Clicked" />
+            <Button Grid.Row="4" 
+                    Grid.Column="1" 
+                    Text="Charles Schwab Roth IRA Ed" 
+                    BackgroundColor="LightBlue" 
+                    FontSize="16" TextColor="Black" 
+                    HorizontalOptions="Fill" 
+                    Clicked="CharlesSchwabRothIRAEdButton_Clicked" />
+            <Button Grid.Row="5" 
+                    Grid.Column="1" 
+                    Text="Charles Schwab Roth IRA Patti" 
+                    BackgroundColor="LightBlue" 
+                    FontSize="16" TextColor="Black" 
+                    HorizontalOptions="Fill" 
+                    Clicked="CharlesSchwabRothIRAPattiButton_Clicked" />
+            <Button Grid.Row="6" 
+                    Grid.Column="1" 
+                    Text="NetX" 
+                    BackgroundColor="LightBlue" 
+                    FontSize="16" TextColor="Black" 
+                    HorizontalOptions="Fill"
+                    Clicked="NetXButton_Clicked" />
+            <Button Grid.Row="7" 
+                    Grid.Column="1" 
+                    Text="HealthPro" 
+                    BackgroundColor="LightBlue" 
+                    FontSize="16" 
+                    TextColor="Black" 
+                    HorizontalOptions="Fill" 
+                    Clicked="HealthProButton_Clicked" />
+            <Button Grid.Row="8" 
+                    Grid.Column="1" 
+                    Text="Select 401(K)" 
+                    BackgroundColor="LightBlue" 
+                    FontSize="16" 
+                    TextColor="Black" 
+                    HorizontalOptions="Fill" 
+                    Clicked="Select401KButton_Clicked" />
+            <Button Grid.Row="9" 
+                    Grid.Column="1" 
+                    Text="Gold" 
+                    BackgroundColor="LightBlue" 
+                    FontSize="16" TextColor="Black" 
+                    HorizontalOptions="Fill"
+                    Clicked="GoldButton_Clicked" />
+            <Button Grid.Row="10" 
+                    Grid.Column="1" 
+                    Text="House" 
+                    BackgroundColor="LightBlue" 
+                    FontSize="16" 
+                    TextColor="Black" 
+                    HorizontalOptions="Fill"
+                    Clicked="HouseButton_Clicked" />
+            <Button Grid.Row="11" 
+                    Grid.Column="1" 
+                    Text="Cheverolet Impala" 
+                    BackgroundColor="LightBlue" 
+                    FontSize="16" TextColor="Black" 
+                    HorizontalOptions="Fill" 
+                    Clicked="ChevroletImpalaButton_Clicked" />
+            <Button Grid.Row="12" 
+                    Grid.Column="1" 
+                    Text="Nissan Sentra" 
+                    BackgroundColor="LightBlue" 
+                    FontSize="16" TextColor="Black" 
+                    HorizontalOptions="Fill" 
+                    Clicked="NissanSentraButton_Clicked" />
+            <!-- Add more as needed -->
+
+            <!-- Column 2: Cash -->
+            <Button Grid.Row="1" 
+                    Grid.Column="2" 
+                    Text="Cash Register"
+                    x:Name="CashButton"
+                    BackgroundColor="Azure"
+                    TextColor="Black"
+                    FontSize="16"
+                    HorizontalOptions="Fill"
+                    Clicked="CashButton_Clicked" />
+            <Button Grid.Row="2" 
+                    Grid.Column="2" 
+                    Text="BMO Check Register"
+                    x:Name="BmoCheckRegisterButton"
+                    BackgroundColor="Azure"
+                    TextColor="Black"
+                    FontSize="16"
+                    HorizontalOptions="Fill"
+                    Clicked="BmoCheckRegisterButton_Clicked" />
+            <Button Grid.Row="3" 
+                    Grid.Column="2" 
+                    Text="BMO Money Market Register"
+                    x:Name="BmoMoneyMarketRegisterButton"
+                    BackgroundColor="Azure"
+                    TextColor="Black"
+                    FontSize="16"
+                    HorizontalOptions="Fill"
+                    Clicked="BmoMoneyMarketRegisterButton_Clicked" />
+            <Button Grid.Row="4" 
+                    Grid.Column="2" 
+                    Text="BMO CD Register"
+                    x:Name="BmoCdRegisterButton"
+                    BackgroundColor="Azure"
+                    TextColor="Black"
+                    FontSize="16"
+                    HorizontalOptions="Fill"
+                    Clicked="BmoCdRegisterButton_Clicked" />
+            <Button Grid.Row="13" 
+                    Grid.Column="2" 
+                    Text="" 
+                    BackgroundColor="Transparent" />
+            <Button Grid.Row="14" 
+                    Grid.Column="2" 
+                    Text="Exit"
+                    x:Name="ExitButton"
+                    WidthRequest="96"
+                    BackgroundColor="IndianRed"
+                    TextColor="Black"
+                    FontSize="16"
+                    HorizontalOptions="Fill"
+                    Clicked="ExitButton_Clicked" />
+            <!-- Add more as needed -->
+
+            <!-- Column 3: Liabilities (placeholders) -->
+            <Button Grid.Row="1" 
+                    Grid.Column="3" 
+                    Text="AMEX"
+                    x:Name="AMEXButton"
+                    BackgroundColor="Moccasin"
+                    FontSize="16"
+                    TextColor="Black"
+                    HorizontalOptions="Fill"
+                    Clicked="AMEXButton_Clicked" />
+            <Button Grid.Row="2" 
+                    Grid.Column="3" 
+                    Text="Visa" 
+                    BackgroundColor="Moccasin" 
+                    FontSize="16" TextColor="Black" 
+                    HorizontalOptions="Fill"
+                    Clicked="VisaButton_Clicked" />
+            <Button Grid.Row="3" 
+                    Grid.Column="3" 
+                    Text="MasterCard" 
+                    BackgroundColor="Moccasin" 
+                    FontSize="16" 
+                    TextColor="Black" 
+                    HorizontalOptions="Fill"
+                    Clicked="MasterCardButton_Clicked" />
+            <!-- Add more as needed -->
+
+            <!-- Column 4: Tools -->
+            <Button Grid.Row="1" 
+                    Grid.Column="4" 
+                    Text="Check Number" 
+                    x:Name="CheckNumberButton" 
+                    BackgroundColor="LightGray" 
+                    TextColor="Black" FontSize="16" 
+                    HorizontalOptions="Fill" 
+                    Clicked="CheckNumberButton_Clicked" />
+            <Button Grid.Row="2"
+                    Grid.Column="4"
+                    Text="Category"
+                    x:Name="CategoryButton"
+                    BackgroundColor="LightGray"
+                    TextColor="Black"
+                    FontSize="16"
+                    HorizontalOptions="Fill"
+                    Clicked="CategoryButton_Clicked" />
+            <Button Grid.Row="3" 
+                    Grid.Column="4" 
+                    Text="Category List"
+                    x:Name="CategoryListButton"
+                    BackgroundColor="LightGray"
+                    TextColor="Black"
+                    FontSize="16"
+                    HorizontalOptions="Fill"                
+                    Clicked="CategoryListButton_Clicked" />
+            <Button Grid.Row="4"
+                    Grid.Column="4"
+                    Text="Opening Balances"
+                    x:Name="OpeningBalancesButton"
+                    BackgroundColor="LightGray"
+                    TextColor="Black"
+                    FontSize="16"
+                    HorizontalOptions="Fill"
+                    Clicked="OpeningBalancesButton_Clicked" />
+            <Button Grid.Row="5" 
+                    Grid.Column="4"
+                    Text="Excluded Categories"
+                    x:Name="ExcludedCategoriesButton"
+                    BackgroundColor="LightGray"
+                    TextColor="Black"
+                    FontSize="16"
+                    HorizontalOptions="Fill"
+                    Clicked="OnExcludedCategoriesClicked"/>
+            <Button Grid.Row="6" 
+                    Grid.Column="4"
+                    Text="Forecast Expenses"
+                    x:Name="ForecastExpensesButton"
+                    BackgroundColor="LightGray"
+                    TextColor="Black"
+                    FontSize="16"
+                    HorizontalOptions="Fill"
+                    Clicked="ForecastExpensesButton_Clicked"/>
+            <!-- Add more as needed -->
+            
+        </Grid>
+    </VerticalStackLayout>
+</ContentPage>

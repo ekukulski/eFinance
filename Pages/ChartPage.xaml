@@ -1,0 +1,24 @@
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.Maui;assembly=LiveChartsCore.SkiaSharpView.Maui"
+             x:Class="KukiFinance.Pages.ChartPage"
+             Title="Account Balance Chart">
+    <VerticalStackLayout>
+        <Label x:Name="TitleLabel"
+               FontSize="20"
+               FontAttributes="Bold"
+               HorizontalOptions="Center"
+               Margin="10"/>
+        <lvc:CartesianChart x:Name="BalanceChart"
+                            HeightRequest="400"
+                            WidthRequest="2400"
+                            HorizontalOptions="FillAndExpand"
+                            Margin="20"/>
+        <Button Text="Close"
+                Clicked="OnCloseClicked"
+                BackgroundColor="IndianRed"
+                HorizontalOptions="Center"
+                WidthRequest="96"
+                Margin="10"/>
+    </VerticalStackLayout>
+</ContentPage>

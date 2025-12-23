@@ -1,0 +1,84 @@
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.Maui;assembly=LiveChartsCore.SkiaSharpView.Maui"
+             x:Class="KukiFinance.Pages.FinanceSummaryPage"
+             Title="Finance Summary">
+    
+    <VerticalStackLayout>
+        
+        <ScrollView>
+            
+            <Grid x:Name="SummaryGrid"
+                  ColumnDefinitions="*,*,*,*,*,*"
+                  RowSpacing="0"
+                  Padding="0">
+                
+                <!-- Header Row -->
+                <Label Text="Asset Name" Grid.Row="0" Grid.Column="0" FontAttributes="Bold"/>
+                
+                <Label Text="Asset Value" Grid.Row="0" Grid.Column="1" FontAttributes="Bold"/>
+                
+                <Label Text="Cash Name" Grid.Row="0" Grid.Column="2" FontAttributes="Bold"/>
+                
+                <Label Text="Cash Value" Grid.Row="0" Grid.Column="3" FontAttributes="Bold"/>
+                
+                <Label Text="Liability Name" Grid.Row="0" Grid.Column="4" FontAttributes="Bold"/>
+                
+                <Label Text="Liability Value" Grid.Row="0" Grid.Column="5" FontAttributes="Bold"/>
+                <!-- Data and summary rows will be added in code-behind -->
+            
+            </Grid>
+        
+        </ScrollView>
+        
+        <HorizontalStackLayout HorizontalOptions="Center" 
+                               Spacing="16" 
+                               Margin="0,10,0,0">
+            
+            <Label Text="Year" 
+                   VerticalOptions="Center"/>
+            
+            <Picker x:Name="YearPicker" 
+                    WidthRequest="100"/>
+            
+            <Label Text="Quarter" 
+                   VerticalOptions="Center"/>
+            
+            <Picker x:Name="QuarterPicker" 
+                    WidthRequest="100"/>
+            
+            <Label Text="Month" 
+                   VerticalOptions="Center"/>
+            
+            <Picker x:Name="MonthPicker" 
+                    WidthRequest="100"/>
+        
+        </HorizontalStackLayout>
+        
+        <lvc:CartesianChart x:Name="NetWorthChart"
+                            HeightRequest="500"
+                            IsVisible="False"
+                            Margin="10"/>
+        
+        <HorizontalStackLayout HorizontalOptions="Center" Spacing="16">
+            
+            <Button Text="Chart"
+                    x:Name="ChartButton"
+                    WidthRequest="96"
+                    BackgroundColor="DarkSeaGreen"
+                    TextColor="Black"
+                    FontSize="16"
+                    Clicked="ChartButton_Clicked" />
+            
+            <Button Text="Return"
+                    x:Name="ReturnButton"
+                    WidthRequest="96"
+                    BackgroundColor="IndianRed"
+                    TextColor="Black"
+                    FontSize="16"
+                    Clicked="ReturnButton_Clicked" />
+        </HorizontalStackLayout>
+    
+    </VerticalStackLayout>
+
+</ContentPage>
