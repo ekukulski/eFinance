@@ -2,6 +2,7 @@
 using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using SkiaSharp;
@@ -18,6 +19,8 @@ namespace KukiFinance.Pages
             List<(DateTime WeekEndDate, decimal Balance)> forecastBalances)
         {
             InitializeComponent();
+
+            // Keep your window sizing behavior
             WindowCenteringService.CenterWindow(2750, 600);
 
             TitleLabel.Text = $"{account} - {year} Weekly Balance";
@@ -39,30 +42,42 @@ namespace KukiFinance.Pages
             for (var dt = firstSaturday; dt <= lastSaturday; dt = dt.AddDays(7))
                 saturdays.Add(dt);
 
-            var actualDict = actualBalances.ToDictionary(b => b.WeekEndDate, b => (double)b.Balance);
-            var forecastDict = forecastBalances.ToDictionary(b => b.WeekEndDate, b => (double)b.Balance);
+            var actualDict = actualBalances.ToDictionary(b => b.WeekEndDate.Date, b => (double)b.Balance);
+            var forecastDict = forecastBalances.ToDictionary(b => b.WeekEndDate.Date, b => (double)b.Balance);
 
             // Find the last actual Saturday (≤ today)
-            var lastActualSaturday = saturdays.Where(d => d <= DateTime.Today && actualDict.ContainsKey(d)).LastOrDefault();
-            var lastActualBalance = lastActualSaturday != default ? actualDict[lastActualSaturday] : double.NaN;
+            var lastActualSaturday = saturdays
+                .Where(d => d.Date <= DateTime.Today.Date && actualDict.ContainsKey(d.Date))
+                .LastOrDefault();
+
+            var lastActualBalance = lastActualSaturday != default && actualDict.ContainsKey(lastActualSaturday.Date)
+                ? actualDict[lastActualSaturday.Date]
+                : double.NaN;
 
             // Find the first Saturday after today
-            var firstForecastSaturday = saturdays.FirstOrDefault(d => d > DateTime.Today);
+            var firstForecastSaturday = saturdays.FirstOrDefault(d => d.Date > DateTime.Today.Date);
 
             // Build line values: actuals up to today, then connect to forecast, repeat last known forecast if missing
             double lastForecastBalance = lastActualBalance;
+
             var lineValues = saturdays.Select(d =>
             {
-                if (d < firstForecastSaturday && actualDict.ContainsKey(d))
-                    return actualDict[d];
-                if (d == firstForecastSaturday)
+                var dd = d.Date;
+
+                if (dd < firstForecastSaturday.Date && actualDict.ContainsKey(dd))
+                    return actualDict[dd];
+
+                if (dd == firstForecastSaturday.Date)
                     return lastActualBalance;
-                if (d > firstForecastSaturday)
+
+                if (dd > firstForecastSaturday.Date)
                 {
-                    if (forecastDict.ContainsKey(d))
-                        lastForecastBalance = forecastDict[d];
+                    if (forecastDict.ContainsKey(dd))
+                        lastForecastBalance = forecastDict[dd];
+
                     return lastForecastBalance;
                 }
+
                 return double.NaN;
             }).ToArray();
 
@@ -70,12 +85,16 @@ namespace KukiFinance.Pages
             lastForecastBalance = lastActualBalance;
             var forecastDotValues = saturdays.Select(d =>
             {
-                if (d > DateTime.Today)
+                var dd = d.Date;
+
+                if (dd > DateTime.Today.Date)
                 {
-                    if (forecastDict.ContainsKey(d))
-                        lastForecastBalance = forecastDict[d];
+                    if (forecastDict.ContainsKey(dd))
+                        lastForecastBalance = forecastDict[dd];
+
                     return lastForecastBalance;
                 }
+
                 return double.NaN;
             }).ToArray();
 
@@ -121,11 +140,11 @@ namespace KukiFinance.Pages
             {
                 // Only show actuals up to the last Saturday with data
                 var saturdaysWithActuals = saturdays
-                    .Where(d => d <= DateTime.Today && actualDict.ContainsKey(d))
+                    .Where(d => d.Date <= DateTime.Today.Date && actualDict.ContainsKey(d.Date))
                     .ToList();
 
                 var actualValues = saturdaysWithActuals
-                    .Select(d => actualDict[d])
+                    .Select(d => actualDict[d.Date])
                     .ToArray();
 
                 var actualLabels = saturdaysWithActuals
@@ -166,9 +185,10 @@ namespace KukiFinance.Pages
             };
         }
 
-        private async void OnCloseClicked(object sender, EventArgs e)
+        // ✅ Safe return: modal OR normal navigation (prevents app crash)
+        private async void OnReturnClicked(object sender, EventArgs e)
         {
-            await Navigation.PopModalAsync();
+            await Navigation.PopAsync();
         }
     }
 }

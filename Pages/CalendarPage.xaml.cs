@@ -1,657 +1,253 @@
 ﻿using Microsoft.Maui.Controls;
+using Microsoft.Maui.Graphics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
-using KukiFinance.Converters;
+using System;
 using KukiFinance.Services;
 
 namespace KukiFinance.Pages
 {
     public partial class CalendarPage : ContentPage
     {
-        public class CalendarExpense
+        // ===== Models =====
+        public class RegisterEntry
         {
             public DateTime Date { get; set; }
-            public string Category { get; set; }
-            public decimal Amount { get; set; }
-        }
-
-        private class Entry
-        {
-            public DateTime Date { get; set; }
-            public string Category { get; set; }
+            public string Category { get; set; } = "";
             public decimal Amount { get; set; }
             public decimal Balance { get; set; }
         }
 
-        private class ForecastEntry
+        public class ForecastEntry
         {
             public DateTime Date { get; set; }
-            public string Category { get; set; }
+            public string Account { get; set; } = "";
+            public string Category { get; set; } = "";
             public decimal Amount { get; set; }
-            public string Account { get; set; }
         }
+
+        private class ForecastExpenseRow
+        {
+            public string Account { get; set; } = "";
+            public string Frequency { get; set; } = "";
+            public int Year { get; set; }
+            public string Month { get; set; } = "";
+            public int Day { get; set; }
+            public string Category { get; set; } = "";
+            public decimal Amount { get; set; }
+        }
+
+        // ===== Account picker list =====
+        private readonly List<string> accounts = new()
+        {
+            "BMO Check",
+            "AMEX",
+            "Visa",
+            "MasterCard",
+            "Cash",
+            "BMO MoneyMarket",
+            "BMO CD",
+            "Midland",
+            "CS Contributory",
+            "CS Joint Tenant",
+            "CS Roth IRA Ed",
+            "CS Roth IRA Patti",
+            "Pershing NetX",
+            "Fidelity Health Pro",
+            "Select 401K",
+            "Gold",
+            "House",
+            "Chevrolet Impala",
+            "Nissan Sentra"
+        };
+
+        // Map account -> *Current.csv
+        private readonly Dictionary<string, string> accountFileMap = new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "BMO Check", "BMOCheckCurrent.csv" },
+            { "AMEX", "AMEXCurrent.csv" },
+            { "Visa", "VisaCurrent.csv" },
+            { "MasterCard", "MasterCardCurrent.csv" },
+            { "Cash", "CashCurrent.csv" },
+            { "BMO MoneyMarket", "BMOMoneyMarketCurrent.csv" },
+            { "BMO CD", "BMOCDCurrent.csv" },
+            { "Midland", "MidlandCurrent.csv" },
+
+            // matches your real file list
+            { "CS Contributory", "CharlesSchwabContributoryCurrent.csv" },
+            { "CS Joint Tenant", "CharlesSchwabJointTenantCurrent.csv" },
+            { "CS Roth IRA Ed", "CharlesSchwabRothIraEdCurrent.csv" },
+            { "CS Roth IRA Patti", "CharlesSchwabRothIraPattiCurrent.csv" },
+            { "Pershing NetX", "NetXCurrent.csv" },
+            { "Fidelity Health Pro", "HealthProCurrent.csv" },
+
+            { "Select 401K", "Select401KCurrent.csv" },
+            { "Gold", "GoldCurrent.csv" },
+            { "House", "HouseCurrent.csv" },
+            { "Chevrolet Impala", "ChevroletImpalaCurrent.csv" },
+            { "Nissan Sentra", "NissanSentraCurrent.csv" }
+        };
 
         public CalendarPage()
         {
             InitializeComponent();
-            WindowCenteringService.CenterWindow(1650, 1285);
 
-            AccountPicker.ItemsSource = new List<string>
-            {
-                "Cash",
-                "BMO Check",
-                "BMO MoneyMarket",
-                "BMO CD",
-                "AMEX",
-                "Visa",
-                "MasterCard",
-                "Midland",
-                "CS Contributory",
-                "CS Joint Tenant",
-                "CS Roth IRA Ed",
-                "CS Roth IRA Patti",
-                "Pershing NetX",
-                "Fidelity Health Pro",
-                "Select 401K",
-                "Gold",
-                "House",
-                "Chevrolet Impala",
-                "Nissan Sentra"
-            };
-            AccountPicker.SelectedIndex = 1; // Default to BMO Check
+            AccountPicker.ItemsSource = accounts;
+            var idx = accounts.IndexOf("BMO Check");
+            AccountPicker.SelectedIndex = idx >= 0 ? idx : 0;
 
-            var years = new List<int> { 2023, 2024, 2025, 2026, 2027, 2028, 2029, 2030, 2031, 2032, 2033, 2034, 2035, 2036, 2037, 2038, 2039, 2040, 2041, 2042, 2043, 2044, 2045, 2046, 2047, 2048, 2049, 2050, 2051, 2052, 2053, 2054, 2055, 2056, 2057, 2058 };
-            YearPicker.ItemsSource = years;
-            YearPicker.SelectedIndex = years.IndexOf(DateTime.Today.Year);
+            for (int y = DateTime.Today.Year - 1; y <= DateTime.Today.Year + 5; y++)
+                YearPicker.Items.Add(y.ToString());
+            YearPicker.SelectedItem = DateTime.Today.Year.ToString();
 
-            var months = Enumerable.Range(1, 12)
-                .Select(m => CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(m)).ToList();
-            MonthPicker.ItemsSource = months;
-            MonthPicker.SelectedIndex = DateTime.Today.Month - 1;
+            for (int m = 1; m <= 12; m++)
+                MonthPicker.Items.Add(CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(m));
+            MonthPicker.SelectedItem = CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(DateTime.Today.Month);
 
-            // Show the calendar for the current month on page load
-            ShowMonth(AccountPicker.ItemsSource[AccountPicker.SelectedIndex].ToString(), DateTime.Today.Year, DateTime.Today.Month);
+            AccountPicker.SelectedIndexChanged += (_, __) => SafeShowMonth();
+            YearPicker.SelectedIndexChanged += (_, __) => SafeShowMonth();
+            MonthPicker.SelectedIndexChanged += (_, __) => SafeShowMonth();
+
+            SafeShowMonth();
         }
 
         protected override void OnAppearing()
         {
             base.OnAppearing();
-            WindowCenteringService.CenterWindow(1650, 1285);
+            WindowCenteringService.CenterWindow(2500, 1200); // <-- pick your preferred Calendar size
         }
 
-        private void OnShowMonthClicked(object sender, EventArgs e)
+        // Wrap ShowMonth to prevent hard-crash on unexpected exceptions
+        private void SafeShowMonth()
         {
-            if (AccountPicker.SelectedItem == null ||
-                YearPicker.SelectedItem == null ||
-                MonthPicker.SelectedItem == null) return;
+            try
+            {
+                ShowMonth();
+            }
+            catch (Exception ex)
+            {
+                // Don’t crash the app; show something visible for debugging
+                MonthGrid.Children.Clear();
+                MonthGrid.RowDefinitions.Clear();
+                MonthGrid.ColumnDefinitions.Clear();
 
-            int year = (int)YearPicker.SelectedItem;
-            int month = DateTime.ParseExact(MonthPicker.SelectedItem.ToString(), "MMMM", CultureInfo.CurrentCulture).Month;
+                MonthGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                MonthGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
+
+                MonthGrid.Add(new Label
+                {
+                    Text = "Calendar error:\n" + ex.Message,
+                    TextColor = Colors.Red,
+                    FontAttributes = FontAttributes.Bold
+                }, 0, 0);
+
+                System.Diagnostics.Debug.WriteLine(ex);
+            }
+        }
+
+        // ===== Buttons =====
+        private async void OnChartClicked(object sender, EventArgs e)
+        {
+            if (AccountPicker.SelectedItem == null || YearPicker.SelectedItem == null)
+                return;
+
             string account = AccountPicker.SelectedItem.ToString();
-            ShowMonth(account, year, month);
+            int year = int.Parse(YearPicker.SelectedItem.ToString());
+
+            var actualWeeklyBalances = BuildActualWeeklyBalances(account, year);
+            var forecastWeeklyBalances = BuildForecastWeeklyBalances(account);
+
+            var chartPage = new ChartPage(account, year, actualWeeklyBalances, forecastWeeklyBalances);
+            await Navigation.PushAsync(chartPage);
         }
 
-        private void ShowMonth(string account, int year, int month)
+        private async void ReturnButton_Clicked(object sender, EventArgs e)
         {
+            await Navigation.PopAsync();
+        }
+
+        // ===== Main month render =====
+        private void ShowMonth()
+        {
+            string account = AccountPicker.SelectedItem?.ToString() ?? "BMO Check";
+            int year = int.TryParse(YearPicker.SelectedItem?.ToString(), out var y) ? y : DateTime.Today.Year;
+
+            // IMPORTANT: MonthPicker.SelectedIndex can be -1 during init/re-measure
+            int month = (MonthPicker.SelectedIndex >= 0 ? MonthPicker.SelectedIndex : DateTime.Today.Month - 1) + 1;
+
             MonthGrid.Children.Clear();
             MonthGrid.RowDefinitions.Clear();
             MonthGrid.ColumnDefinitions.Clear();
 
+            // 7 columns
             for (int c = 0; c < 7; c++)
                 MonthGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
+            // Header row
+            MonthGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            string[] dayHeaders = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+            for (int i = 0; i < 7; i++)
+            {
+                MonthGrid.Add(new Label
+                {
+                    Text = dayHeaders[i],
+                    FontAttributes = FontAttributes.Bold,
+                    HorizontalTextAlignment = TextAlignment.Center
+                }, i, 0);
+            }
+
             var firstDay = new DateTime(year, month, 1);
             int daysInMonth = DateTime.DaysInMonth(year, month);
-            int firstDayOfWeek = (int)firstDay.DayOfWeek;
-            int totalCells = firstDayOfWeek + daysInMonth;
-            int rows = (int)Math.Ceiling(totalCells / 7.0);
+            int firstDow = (int)firstDay.DayOfWeek;
+            int totalCells = firstDow + daysInMonth;
+            int weeks = (int)Math.Ceiling(totalCells / 7.0);
 
-            for (int r = 0; r < rows; r++)
-                MonthGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            // ✅ Key stability change: Auto week rows (more stable after navigation)
+            for (int r = 0; r < weeks; r++)
+                MonthGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            // Actual balances and entries
-            var dayBalances = CalculateDailyBalances(account, year, month);
-            var actualEntries = ReadEntries(account, year, month)
-                .Where(e => e.Date <= DateTime.Today)
-                .OrderBy(e => e.Date)
+            // Actual entries for month
+            var actual = ReadRegisterEntries(account)
+                .Where(r => r.Date.Year == year && r.Date.Month == month)
                 .ToList();
-            var entriesByDay = actualEntries
-                .GroupBy(e => e.Date.Day)
+
+            var actualByDay = actual
+                .GroupBy(r => r.Date.Day)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
-            // Forecast handling
-            Dictionary<DateTime, (decimal balance, List<ForecastEntry> forecasts)> forecastBalances = null;
-            List<ForecastEntry> forecastEntries = null;
-            Dictionary<int, List<ForecastEntry>> forecastEntriesByDay = null;
+            var actualDailyBalances = GetMonthActualDailyBalances(account, year, month);
 
-            if (account == "BMO Check")
+            // Forecasts
+            var baseForecasts = ReadForecastEntriesExpanded(DateTime.Today.AddMonths(-3), DateTime.Today.AddYears(1));
+
+            // ✅ FIX: method exists below now
+            var derivedBmoPayments = ComputeCardPaymentsForBmo(baseForecasts, DateTime.Today, DateTime.Today.AddYears(1), true);
+
+            var forecastBalances = CalculateForecastBalances(account, baseForecasts, derivedBmoPayments);
+
+            Dictionary<int, List<ForecastEntry>> forecastByDay;
+
+            if (account.Equals("BMO Check", StringComparison.OrdinalIgnoreCase))
             {
-                // For BMO: show forecasted balances and forecast entries including derived card payments
-                forecastBalances = CalculateForecastBalances(account);
+                var display = baseForecasts
+                    .Where(f => f.Account.Equals("BMO Check", StringComparison.OrdinalIgnoreCase))
+                    .Concat(derivedBmoPayments)
+                    .Where(f => f.Date.Year == year && f.Date.Month == month)
+                    .ToList();
 
-                // Read forecasts and include derived BMO payments so they appear as entries on the calendar.
-                // ComputeCardPaymentsForBmo returns the BMO-side payment entries (negative values).
-                var baseForecasts = ReadForecastEntries();
-                var derived = ComputeCardPaymentsForBmo(baseForecasts, DateTime.Today, DateTime.Today.AddYears(1), true);
-                forecastEntries = baseForecasts.Concat(derived).OrderBy(f => f.Date).ToList();
-
-                forecastEntriesByDay = forecastEntries
-                    .Where(f => f.Account.Equals("BMO Check", StringComparison.OrdinalIgnoreCase) && f.Date.Year == year && f.Date.Month == month && f.Date > DateTime.Today)
-                    .GroupBy(f => f.Date.Day)
-                    .ToDictionary(g => g.Key, g => g.ToList());
+                forecastByDay = display.GroupBy(f => f.Date.Day).ToDictionary(g => g.Key, g => g.ToList());
             }
-            else if (new[] { "AMEX", "Visa", "MasterCard" }.Contains(account))
+            else if (IsCard(account))
             {
-                // For card accounts: show forecasted charges assigned to the selected card (future),
-                // include the derived card-side payment entries (positive amounts) corresponding to BMO payments,
-                // and compute forecasted card balances.
-                var baseForecasts = ReadForecastEntries();
-
-                // Get the BMO-side derived payment entries (these are negative amounts in BMO Check)
-                var derivedBmoPayments = ComputeCardPaymentsForBmo(baseForecasts, DateTime.Today, DateTime.Today.AddYears(1), true);
-
-
-                // Mirror BMO derived payments into card accounts by inverting sign for display only.
-                var derivedCardSide = derivedBmoPayments
+                var mirroredPayments = derivedBmoPayments
                     .Select(d =>
                     {
                         var cardName = GetCardNameFromCategory(d.Category);
-                        if (string.IsNullOrEmpty(cardName)) return null;
-                        return new ForecastEntry
-                        {
-                            Date = d.Date,
-                            Account = cardName,
-                            Category = d.Category,
-                            Amount = -d.Amount // invert sign to make it positive for the card account
-                        };
-                    })
-                    .Where(x => x != null)
-                    .ToList();
-
-                // Combine base forecasts with derived card-side entries so calendar shows them.
-                // NOTE: derivedCardSide is for display only; it is not injected into CalculateForecastBalances
-                // to avoid double-counting/propagation.
-                forecastEntries = baseForecasts
-                    .Concat(derivedCardSide)
-                    .OrderBy(f => f.Date)
-                    .ToList();
-
-                forecastEntriesByDay = forecastEntries
-                    .Where(f => f.Account.Equals(account, StringComparison.OrdinalIgnoreCase) && f.Date.Year == year && f.Date.Month == month && f.Date > DateTime.Today)
-                    .GroupBy(f => f.Date.Day)
-                    .ToDictionary(g => g.Key, g => g.ToList());
-
-                // Compute forecast balances for the selected card (uses card register + forecasts).
-                // CalculateForecastBalances does NOT inject the mirrored card entries — card balances are built
-                // from the card's own forecasts and register data (this prevents duplicated / propagated amounts).
-                forecastBalances = CalculateForecastBalances(account);
-            }
-            else
-            {
-                forecastBalances = new Dictionary<DateTime, (decimal balance, List<ForecastEntry>)>();
-                forecastEntriesByDay = new Dictionary<int, List<ForecastEntry>>();
-            }
-
-            int dayCounter = 1;
-            for (int cell = 0; cell < totalCells; cell++)
-            {
-                int row = cell / 7;
-                int col = cell % 7;
-                if (cell < firstDayOfWeek)
-                {
-                    MonthGrid.Add(new Label { Text = "" }, col, row);
-                }
-                else if (dayCounter <= daysInMonth)
-                {
-                    var date = new DateTime(year, month, dayCounter);
-                    var dayStack = new VerticalStackLayout
-                    {
-                        Padding = 4,
-                        BackgroundColor = Colors.WhiteSmoke
-                    };
-
-                    dayStack.Children.Add(new Label { Text = dayCounter.ToString(), FontAttributes = FontAttributes.Bold });
-
-                    if (date <= DateTime.Today)
-                    {
-                        // Show actual entries
-                        var dayEntries = entriesByDay.ContainsKey(dayCounter) ? entriesByDay[dayCounter] : new List<Entry>();
-                        foreach (var entry in dayEntries)
-                        {
-                            var catLabel = new Label { Text = entry.Category, FontSize = 12 };
-                            var amtLabel = new Label
-                            {
-                                Text = AmountFormatConverter.Format(entry.Amount),
-                                TextColor = AmountColorConverter.GetColor(entry.Amount),
-                                FontSize = 12
-                            };
-                            var rowStack = new HorizontalStackLayout { Spacing = 4 };
-                            rowStack.Children.Add(catLabel);
-                            rowStack.Children.Add(amtLabel);
-                            dayStack.Children.Add(rowStack);
-                        }
-                        dayStack.Children.Add(new BoxView
-                        {
-                            HeightRequest = 8,
-                            Color = Colors.Transparent
-                        });
-                        decimal balance = dayBalances.ContainsKey(date) ? dayBalances[date] : 0;
-                        dayStack.Children.Add(new Label
-                        {
-                            Text = $"Balance: {AmountFormatConverter.Format(balance)}",
-                            FontSize = 12,
-                            FontAttributes = FontAttributes.Bold,
-                            TextColor = AmountColorConverter.GetColor(balance)
-                        });
-                    }
-                    else
-                    {
-                        // Show forecasted entries and balances for BMO; for cards show forecasted charges and forecasted card balances
-                        if (forecastEntriesByDay != null && forecastEntriesByDay.ContainsKey(dayCounter))
-                        {
-                            foreach (var entry in forecastEntriesByDay[dayCounter])
-                            {
-                                var catLabel = new Label { Text = entry.Category, FontSize = 12 };
-                                var amtLabel = new Label
-                                {
-                                    Text = AmountFormatConverter.Format(entry.Amount),
-                                    TextColor = AmountColorConverter.GetColor(entry.Amount),
-                                    FontSize = 12
-                                };
-                                var rowStack = new HorizontalStackLayout { Spacing = 4 };
-                                rowStack.Children.Add(catLabel);
-                                rowStack.Children.Add(amtLabel);
-                                dayStack.Children.Add(rowStack);
-                            }
-                        }
-
-                        dayStack.Children.Add(new BoxView
-                        {
-                            HeightRequest = 8,
-                            Color = Colors.Transparent
-                        });
-
-                        // Show forecast balance when available (BMO and card accounts)
-                        if (forecastBalances != null && forecastBalances.ContainsKey(date))
-                        {
-                            decimal balance = forecastBalances[date].balance;
-                            dayStack.Children.Add(new Label
-                            {
-                                Text = $"Forecast Balance: {AmountFormatConverter.Format(balance)}",
-                                FontSize = 12,
-                                FontAttributes = FontAttributes.Bold,
-                                TextColor = AmountColorConverter.GetColor(balance)
-                            });
-                        }
-                    }
-
-                    MonthGrid.Add(dayStack, col, row);
-                    dayCounter++;
-                }
-            }
-        }
-
-        private List<Entry> ReadEntries(string account, int year, int month)
-        {
-            string basePath = FilePathHelper.GetKukiFinancePath("");
-            string fileName = account switch
-            {
-                "Cash" => "CashCurrent.csv",
-                "BMO Check" => "BMOCheckCurrent.csv",
-                "BMO MoneyMarket" => "BMOMoneyMarketCurrent.csv",
-                "BMO CD" => "BMOCDCurrent.csv",
-                "AMEX" => "AMEXCurrent.csv",
-                "Visa" => "VisaCurrent.csv",
-                "MasterCard" => "MasterCardCurrent.csv",
-                "Midland" => "MidlandCurrent.csv",
-                "CS Contributory" => "CharlesSchwabContributoryCurrent.csv",
-                "CS Joint Tenant" => "CharlesSchwabJointTenantCurrent.csv",
-                "CS Roth IRA Ed" => "CharlesSchwabRothIraEdCurrent.csv",
-                "CS Roth IRA Patti" => "CharlesSchwabRothIraPattiCurrent.csv",
-                "Pershing NetX" => "NetXCurrent.csv",
-                "Fidelity Health Pro" => "HealthProCurrent.csv",
-                "Select 401K" => "Select401KCurrent.csv",
-                "Gold" => "GoldCurrent.csv",
-                "House" => "HouseCurrent.csv",
-                "Chevrolet Impala" => "ChevroletImpalaCurrent.csv",
-                "Nissan Sentra" => "NissanSentraCurrent.csv",
-                _ => "BMOCheckCurrent.csv"
-            };
-            string csvFile = Path.Combine(basePath, fileName);
-
-            var result = new List<Entry>();
-            if (!File.Exists(csvFile)) return result;
-            var lines = File.ReadAllLines(csvFile);
-            if (lines.Length < 2) return result;
-            var headers = lines[0].Split(',');
-            int dateIdx = Array.FindIndex(headers, h => h.Trim().Equals("Date", StringComparison.OrdinalIgnoreCase));
-            int catIdx = Array.FindIndex(headers, h => h.Trim().Equals("Category", StringComparison.OrdinalIgnoreCase));
-            int amtIdx = Array.FindIndex(headers, h => h.Trim().Equals("Amount", StringComparison.OrdinalIgnoreCase));
-            int balIdx = Array.FindIndex(headers, h => h.Trim().Equals("Balance", StringComparison.OrdinalIgnoreCase));
-            if (dateIdx < 0 || catIdx < 0 || amtIdx < 0 || balIdx < 0) return result;
-
-            string[] formats = { "yyyy-MM-dd", "MM/dd/yyyy", "M/dyyyy" };
-            foreach (var line in lines.Skip(1))
-            {
-                var parts = line.Split(',');
-                if (parts.Length <= Math.Max(Math.Max(dateIdx, catIdx), Math.Max(amtIdx, balIdx))) continue;
-                if (!DateTime.TryParseExact(parts[dateIdx], formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)) continue;
-                if (date.Year != year || date.Month != month) continue;
-                var category = parts[catIdx].Trim();
-                if (!decimal.TryParse(parts[amtIdx], out var amount)) continue;
-                if (!decimal.TryParse(parts[balIdx], out var balance)) continue;
-                result.Add(new Entry { Date = date, Category = category, Amount = amount, Balance = balance });
-            }
-            return result;
-        }
-
-        private Dictionary<DateTime, decimal> CalculateDailyBalances(string account, int year, int month)
-        {
-            string basePath = FilePathHelper.GetKukiFinancePath("");
-            string fileName = account switch
-            {
-                "Cash" => "CashCurrent.csv",
-                "BMO Check" => "BMOCheckCurrent.csv",
-                "BMO MoneyMarket" => "BMOMoneyMarketCurrent.csv",
-                "BMO CD" => "BMOCDCurrent.csv",
-                "AMEX" => "AMEXCurrent.csv",
-                "Visa" => "VisaCurrent.csv",
-                "MasterCard" => "MasterCardCurrent.csv",
-                "Midland" => "MidlandCurrent.csv",
-                "CS Contributory" => "CharlesSchwabContributoryCurrent.csv",
-                "CS Joint Tenant" => "CharlesSchwabJointTenantCurrent.csv",
-                "CS Roth IRA Ed" => "CharlesSchwabRothIraEdCurrent.csv",
-                "CS Roth IRA Patti" => "CharlesSchwabRothIraPattiCurrent.csv",
-                "Pershing NetX" => "NetXCurrent.csv",
-                "Fidelity Health Pro" => "HealthProCurrent.csv",
-                "Select 401K" => "Select401KCurrent.csv",
-                "Gold" => "GoldCurrent.csv",
-                "House" => "HouseCurrent.csv",
-                "Chevrolet Impala" => "ChevroletImpalaCurrent.csv",
-                "Nissan Sentra" => "NissanSentraCurrent.csv",
-                _ => "BMOCheckCurrent.csv"
-            };
-            string csvFile = Path.Combine(basePath, fileName);
-
-            if (!File.Exists(csvFile)) return new Dictionary<DateTime, decimal>();
-            var lines = File.ReadAllLines(csvFile);
-            if (lines.Length < 2) return new Dictionary<DateTime, decimal>();
-            var headers = lines[0].Split(',');
-            int dateIdx = Array.FindIndex(headers, h => h.Trim().Equals("Date", StringComparison.OrdinalIgnoreCase));
-            int balIdx = Array.FindIndex(headers, h => h.Trim().Equals("Balance", StringComparison.OrdinalIgnoreCase));
-            string[] formats = { "yyyy-MM-dd", "MM/dd/yyyy", "M/d/yyyy" };
-
-            var balances = new Dictionary<DateTime, decimal>();
-            decimal lastBalance = 0;
-            DateTime? lastDate = null;
-
-            foreach (var line in lines.Skip(1))
-            {
-                var parts = line.Split(',');
-                if (parts.Length <= Math.Max(dateIdx, balIdx)) continue;
-                if (!DateTime.TryParseExact(parts[dateIdx], formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)) continue;
-                if (!decimal.TryParse(parts[balIdx], out var balance)) continue;
-                if (date > DateTime.Today) break;
-
-                if (lastDate != null)
-                {
-                    var nextDate = lastDate.Value.AddDays(1);
-                    while (nextDate < date)
-                    {
-                        balances[nextDate] = lastBalance;
-                        nextDate = nextDate.AddDays(1);
-                    }
-                }
-                balances[date] = balance;
-                lastBalance = balance;
-                lastDate = date;
-            }
-
-            if (lastDate != null)
-            {
-                var nextDate = lastDate.Value.AddDays(1);
-                while (nextDate <= DateTime.Today)
-                {
-                    balances[nextDate] = lastBalance;
-                    nextDate = nextDate.AddDays(1);
-                }
-            }
-
-            var result = new Dictionary<DateTime, decimal>();
-            for (int d = 1; d <= DateTime.DaysInMonth(year, month); d++)
-            {
-                var date = new DateTime(year, month, d);
-                if (balances.ContainsKey(date))
-                    result[date] = balances[date];
-                else if (d > 1 && result.ContainsKey(new DateTime(year, month, d - 1)))
-                    result[date] = result[new DateTime(year, month, d - 1)];
-                else
-                    result[date] = lastBalance;
-            }
-            return result;
-        }
-
-        // --- updated ReadForecastEntries method ---
-        private List<ForecastEntry> ReadForecastEntries()
-        {
-            string forecastFile = FilePathHelper.GetKukiFinancePath("ForecastExpenses.csv");
-            var result = new List<ForecastEntry>();
-            if (!File.Exists(forecastFile)) return result;
-
-            var lines = File.ReadAllLines(forecastFile);
-            if (lines.Length < 2) return result;
-
-            foreach (var line in lines.Skip(1))
-            {
-                if (string.IsNullOrWhiteSpace(line))
-                    continue;
-
-                var parts = line.Split(',');
-                if (parts.Length < 5)
-                    continue;
-
-                // Backwards-compatible parsing:
-                // New format:  Account,Frequency,Year,Month,Day,Category,Amount
-                // Old format1: Account,Frequency,Month,Day,Category,Amount  (no Year)
-                // Old format2: Frequency,Month,Day,Category,Amount          (no Account/Year)
-                string account;
-                string frequency;
-                string yearStr;
-                string monthStr;
-                int day = 1;
-                string category;
-                decimal amount;
-
-                if (parts.Length >= 7)
-                {
-                    // New format: Account,Frequency,Year,Month,Day,Category,Amount
-                    account = parts[0].Trim();
-                    frequency = parts[1].Trim();
-                    yearStr = parts[2].Trim();
-                    monthStr = parts[3].Trim();
-                    int.TryParse(parts[4].Trim(), out day);
-                    category = parts[5].Trim();
-                    if (!decimal.TryParse(parts[6].Trim(), NumberStyles.Any,
-                            CultureInfo.InvariantCulture, out amount))
-                        continue;
-                }
-                else if (parts.Length == 6)
-                {
-                    // Old format with Account but without explicit Year:
-                    // Account,Frequency,Month,Day,Category,Amount
-                    account = parts[0].Trim();
-                    frequency = parts[1].Trim();
-                    yearStr = string.Empty;
-                    monthStr = parts[2].Trim();
-                    int.TryParse(parts[3].Trim(), out day);
-                    category = parts[4].Trim();
-                    if (!decimal.TryParse(parts[5].Trim(), NumberStyles.Any,
-                            CultureInfo.InvariantCulture, out amount))
-                        continue;
-                }
-                else
-                {
-                    // Very old format without Account / Year:
-                    // Frequency,Month,Day,Category,Amount  -> assume BMO Check
-                    account = "BMO Check";
-                    frequency = parts[0].Trim();
-                    yearStr = string.Empty;
-                    monthStr = parts[1].Trim();
-                    int.TryParse(parts[2].Trim(), out day);
-                    category = parts[3].Trim();
-                    if (!decimal.TryParse(parts[4].Trim(), NumberStyles.Any,
-                            CultureInfo.InvariantCulture, out amount))
-                        continue;
-                }
-
-                // NOTE: yearStr is currently informational only; we treat entries the same
-                // as before (repeating according to Frequency) so existing behavior is preserved.
-
-                // Expand occurrences starting a few months back so billing windows that start
-                // prior to today are included when summing card billing cycles.
-                DateTime today = DateTime.Today;
-                DateTime startDate = today.AddMonths(-3); // cover billing windows that start up to 2 months earlier
-                DateTime endDate = today.AddYears(1);
-                var dates = new List<DateTime>();
-
-                if (frequency.Equals("Once", StringComparison.OrdinalIgnoreCase))
-                {
-                    int monthNum = DateTime.TryParseExact(
-                                       monthStr,
-                                       "MMMM",
-                                       CultureInfo.CurrentCulture,
-                                       DateTimeStyles.None,
-                                       out var mdt)
-                                   ? mdt.Month
-                                   : today.Month;
-
-                    // If a specific year is stored, use it; otherwise use current year (old behavior)
-                    int year = int.TryParse(yearStr, out var yParsed) ? yParsed : today.Year;
-
-                    int dayOfMonth = Math.Min(day, DateTime.DaysInMonth(year, monthNum));
-                    var forecastDate = new DateTime(year, monthNum, dayOfMonth);
-                    if (forecastDate >= startDate && forecastDate <= endDate)
-                        dates.Add(forecastDate);
-                }
-                else if (frequency.Equals("Monthly", StringComparison.OrdinalIgnoreCase))
-                {
-                    // Same behavior as before: monthly from startDate through endDate
-                    for (var dt = new DateTime(startDate.Year, startDate.Month, 1);
-                         dt <= endDate;
-                         dt = dt.AddMonths(1))
-                    {
-                        int m = dt.Month;
-                        int y = dt.Year;
-                        int dayOfMonth = Math.Min(day, DateTime.DaysInMonth(y, m));
-                        var forecastDate = new DateTime(y, m, dayOfMonth);
-                        if (forecastDate >= startDate && forecastDate <= endDate)
-                            dates.Add(forecastDate);
-                    }
-                }
-                else if (frequency.Equals("Annual", StringComparison.OrdinalIgnoreCase))
-                {
-                    int monthNum = DateTime.TryParseExact(
-                                       monthStr,
-                                       "MMMM",
-                                       CultureInfo.CurrentCulture,
-                                       DateTimeStyles.None,
-                                       out var mdt)
-                                   ? mdt.Month
-                                   : today.Month;
-
-                    // If a specific year is stored, only that year; otherwise all years in range
-                    int loopStartYear = int.TryParse(yearStr, out var yParsed)
-                                        ? yParsed
-                                        : startDate.Year;
-                    int loopEndYear = int.TryParse(yearStr, out yParsed)
-                                        ? yParsed
-                                        : endDate.Year;
-
-                    for (int y = loopStartYear; y <= loopEndYear; y++)
-                    {
-                        int dayOfMonth = Math.Min(day, DateTime.DaysInMonth(y, monthNum));
-                        var forecastDate = new DateTime(y, monthNum, dayOfMonth);
-                        if (forecastDate >= startDate && forecastDate <= endDate)
-                            dates.Add(forecastDate);
-                    }
-                }
-                else if (frequency.EndsWith("Months", StringComparison.OrdinalIgnoreCase))
-                {
-                    int freqMonths = int.TryParse(frequency.Split(' ')[0], out var n) ? n : 1;
-                    int startMonth = DateTime.TryParseExact(
-                                         monthStr,
-                                         "MMMM",
-                                         CultureInfo.CurrentCulture,
-                                         DateTimeStyles.None,
-                                         out var smdt)
-                                     ? smdt.Month
-                                     : startDate.Month;
-
-                    var firstDate = new DateTime(
-                        startDate.Year,
-                        startMonth,
-                        Math.Min(day, DateTime.DaysInMonth(startDate.Year, startMonth)));
-
-                    if (firstDate < startDate)
-                        firstDate = firstDate.AddMonths(freqMonths);
-
-                    for (var dt = firstDate; dt <= endDate; dt = dt.AddMonths(freqMonths))
-                    {
-                        int dayOfMonth = Math.Min(day, DateTime.DaysInMonth(dt.Year, dt.Month));
-                        var forecastDate = new DateTime(dt.Year, dt.Month, dayOfMonth);
-                        if (forecastDate >= startDate && forecastDate <= endDate)
-                            dates.Add(forecastDate);
-                    }
-                }
-
-                foreach (var d in dates)
-                {
-                    result.Add(new ForecastEntry
-                    {
-                        Date = d,
-                        Category = category,
-                        Amount = amount,
-                        Account = account
-                    });
-                }
-            }
-
-            return result.OrderBy(e => e.Date).ToList();
-        }
-
-
-        private Dictionary<DateTime, (decimal balance, List<ForecastEntry> forecasts)> CalculateForecastBalances(string account)
-        {
-            // Start from today's calculated balance for the account
-            var balances = CalculateDailyBalances(account, DateTime.Today.Year, DateTime.Today.Month);
-            decimal currentBalance = balances.ContainsKey(DateTime.Today) ? balances[DateTime.Today] : balances.Values.LastOrDefault();
-
-            // 1) Read base forecasts from file (baseForecasts)
-            var baseForecasts = ReadForecastEntries();
-
-            // 2) Derive BMO-side payment entries from base forecasts (these are negative amounts in BMO Check)
-            var derivedBmoPayments = ComputeCardPaymentsForBmo(baseForecasts, DateTime.Today, DateTime.Today.AddYears(1), false);
-
-
-            // 3) Build the working forecasts set used for balance calculations:
-            //    base forecasts + derived BMO payments (BMO withdrawals)
-            var forecasts = baseForecasts.Concat(derivedBmoPayments).ToList();
-
-            // 4) If computing forecast balances for a credit card account, mirror the BMO-derived payment
-            //    into a positive card-side forecast entry and add it to this account's forecasts.
-            //    This ensures the card's running forecast is reduced on the due date.
-            if (new[] { "AMEX", "Visa", "MasterCard" }.Contains(account))
-            {
-                var mirroredForThisCard = derivedBmoPayments
-                    .Select(d =>
-                    {
-                        var cardName = GetCardNameFromCategory(d.Category);
-                        if (string.IsNullOrEmpty(cardName)) return null;
+                        if (string.IsNullOrWhiteSpace(cardName)) return null;
                         if (!cardName.Equals(account, StringComparison.OrdinalIgnoreCase)) return null;
 
-                        // d.Amount is negative (BMO withdrawal). Mirror as positive on the card.
                         return new ForecastEntry
                         {
                             Date = d.Date,
@@ -663,57 +259,560 @@ namespace KukiFinance.Pages
                     .Where(x => x != null)
                     .ToList();
 
-                if (mirroredForThisCard.Any())
-                    forecasts.AddRange(mirroredForThisCard);
+                var display = baseForecasts
+                    .Where(f => f.Account.Equals(account, StringComparison.OrdinalIgnoreCase))
+                    .Concat(mirroredPayments)
+                    .Where(f => f.Date.Year == year && f.Date.Month == month)
+                    .ToList();
+
+                forecastByDay = display.GroupBy(f => f.Date.Day).ToDictionary(g => g.Key, g => g.ToList());
+            }
+            else
+            {
+                var display = baseForecasts
+                    .Where(f => f.Account.Equals(account, StringComparison.OrdinalIgnoreCase))
+                    .Where(f => f.Date.Year == year && f.Date.Month == month)
+                    .ToList();
+
+                forecastByDay = display.GroupBy(f => f.Date.Day).ToDictionary(g => g.Key, g => g.ToList());
             }
 
-            // Build forecastByDate for the selected account only
-            var forecastByDate = forecasts
+            var today = DateTime.Today.Date;
+
+            for (int day = 1; day <= daysInMonth; day++)
+            {
+                int gridRow = 1 + ((firstDow + (day - 1)) / 7);
+                int gridCol = (firstDow + (day - 1)) % 7;
+
+                var date = new DateTime(year, month, day).Date;
+
+                // Day cell: Top = entries, Bottom = balance
+                var cellGrid = new Grid
+                {
+                    Padding = new Thickness(6),
+                    RowDefinitions =
+                    {
+                        new RowDefinition { Height = GridLength.Star },
+                        new RowDefinition { Height = GridLength.Auto }
+                    },
+                    RowSpacing = 2
+                };
+
+                var entriesStack = new VerticalStackLayout { Spacing = 1 };
+                var footerStack = new VerticalStackLayout { Spacing = 0 };
+
+                cellGrid.Add(entriesStack);
+                Grid.SetRow(entriesStack, 0);
+
+                cellGrid.Add(footerStack);
+                Grid.SetRow(footerStack, 1);
+
+                entriesStack.Children.Add(new Label
+                {
+                    Text = day.ToString(),
+                    FontAttributes = FontAttributes.Bold,
+                    FontSize = 16,
+                    TextColor = Colors.Black
+                });
+
+                if (actualByDay.TryGetValue(day, out var dayActuals))
+                    foreach (var a in dayActuals)
+                        entriesStack.Children.Add(MakeLineLabel($"{a.Category} {a.Amount:C2}", a.Amount));
+
+                if (forecastByDay.TryGetValue(day, out var dayForecasts))
+                    foreach (var f in dayForecasts)
+                        entriesStack.Children.Add(MakeLineLabel($"{f.Category} {f.Amount:C2}", f.Amount));
+
+                if (date <= today)
+                {
+                    if (actualDailyBalances.TryGetValue(date, out var bal))
+                    {
+                        if (IsCard(account)) bal = ClampCardBalance(bal);
+                        footerStack.Children.Add(MakeBalanceLabel(bal, false));
+                    }
+                }
+                else
+                {
+                    if (forecastBalances.TryGetValue(date, out var fb))
+                    {
+                        var bal = fb.balance;
+                        if (IsCard(account)) bal = ClampCardBalance(bal);
+                        footerStack.Children.Add(MakeBalanceLabel(bal, true));
+                    }
+                }
+
+                var frame = new Frame
+                {
+                    BorderColor = Colors.LightGray,
+                    Padding = 0,
+                    Margin = new Thickness(1),
+                    HasShadow = false,
+                    Content = cellGrid
+                };
+
+                MonthGrid.Add(frame, gridCol, gridRow);
+            }
+
+            // Trigger re-measure after rebuild
+            Dispatcher.Dispatch(() =>
+            {
+                this.InvalidateMeasure();
+                CalendarHost?.InvalidateMeasure();
+                MonthGrid?.InvalidateMeasure();
+            });
+        }
+
+        // ===== Helpers for colors/labels =====
+        private Color AmountColor(decimal amount)
+        {
+            if (amount < 0m) return Colors.Red;
+            if (amount > 0m) return Colors.Green;
+            return Colors.Black;
+        }
+
+        private Label MakeLineLabel(string text, decimal amount, double fontSize = 12, bool bold = false)
+        {
+            return new Label
+            {
+                Text = text,
+                FontSize = fontSize,
+                FontAttributes = bold ? FontAttributes.Bold : FontAttributes.None,
+                TextColor = AmountColor(amount),
+                LineBreakMode = LineBreakMode.TailTruncation
+            };
+        }
+
+        private Label MakeBalanceLabel(decimal balance, bool isForecast)
+        {
+            return new Label
+            {
+                Text = isForecast ? $"Forecast Balance: {balance:C2}" : $"Balance: {balance:C2}",
+                FontSize = 12,
+                FontAttributes = FontAttributes.Bold,
+                TextColor = balance < 0m ? Colors.Red : Colors.Green,
+                LineBreakMode = LineBreakMode.TailTruncation
+            };
+        }
+
+        // ===== Cards =====
+        private bool IsCard(string account) =>
+            account.Equals("AMEX", StringComparison.OrdinalIgnoreCase) ||
+            account.Equals("Visa", StringComparison.OrdinalIgnoreCase) ||
+            account.Equals("MasterCard", StringComparison.OrdinalIgnoreCase);
+
+        private decimal ClampCardBalance(decimal balance) => balance > 0m ? 0m : balance;
+
+        private string GetCardNameFromCategory(string category)
+        {
+            if (string.IsNullOrWhiteSpace(category)) return null;
+            if (!category.StartsWith("Card Payment", StringComparison.OrdinalIgnoreCase)) return null;
+
+            var parts = category.Split('-');
+            if (parts.Length < 2) return null;
+            return parts[1].Trim();
+        }
+
+        // ===== Register reading =====
+        private List<RegisterEntry> ReadRegisterEntries(string account)
+        {
+            var result = new List<RegisterEntry>();
+
+            if (!accountFileMap.TryGetValue(account, out var fileName))
+                return result;
+
+            string filePath = FilePathHelper.GetKukiFinancePath(fileName);
+            if (!File.Exists(filePath))
+                return result;
+
+            var lines = File.ReadAllLines(filePath);
+            if (lines.Length < 2) return result;
+
+            static int FindHeaderIndex(string[] headers, params string[] names)
+            {
+                for (int i = 0; i < headers.Length; i++)
+                {
+                    var h = headers[i].Trim().Replace("\uFEFF", "");
+                    foreach (var n in names)
+                        if (h.Equals(n, StringComparison.OrdinalIgnoreCase))
+                            return i;
+                }
+                return -1;
+            }
+
+            var headers = lines[0].Split(',');
+
+            int dateIdx = FindHeaderIndex(headers, "Date", "AsOf", "As Of", "Posting Date", "Transaction Date", "Day");
+            int catIdx = FindHeaderIndex(headers, "Category", "Description", "Memo", "Payee", "Details");
+            int amtIdx = FindHeaderIndex(headers, "Amount", "Transaction", "Change", "Delta");
+            int balIdx = FindHeaderIndex(headers, "Balance", "Ending Balance", "Account Balance",
+                                         "Value", "Account Value", "Market Value", "Total Value", "Net Value");
+
+            if (dateIdx < 0 || balIdx < 0)
+                return result;
+
+            string[] formats = { "yyyy-MM-dd", "MM/dd/yyyy", "M/d/yyyy", "M/d/yy", "MM/dd/yy" };
+
+            foreach (var line in lines.Skip(1))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                var parts = line.Split(',');
+                int maxIdx = Math.Max(dateIdx, Math.Max(catIdx, Math.Max(amtIdx, balIdx)));
+                if (parts.Length <= maxIdx) continue;
+
+                if (!DateTime.TryParseExact(parts[dateIdx].Trim(), formats,
+                        CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+                {
+                    if (!DateTime.TryParse(parts[dateIdx].Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out date) &&
+                        !DateTime.TryParse(parts[dateIdx].Trim(), CultureInfo.InvariantCulture, DateTimeStyles.None, out date))
+                        continue;
+                }
+
+                string category = catIdx >= 0 ? parts[catIdx].Trim() : "";
+
+                decimal amount = 0m;
+                if (amtIdx >= 0)
+                    decimal.TryParse(parts[amtIdx].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out amount);
+
+                decimal balance = 0m;
+                decimal.TryParse(parts[balIdx].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out balance);
+
+                result.Add(new RegisterEntry
+                {
+                    Date = date.Date,
+                    Category = category,
+                    Amount = amount,
+                    Balance = balance
+                });
+            }
+
+            return result.OrderBy(r => r.Date).ToList();
+        }
+
+        private Dictionary<DateTime, decimal> CalculateDailyBalances(string account, DateTime start, DateTime end)
+        {
+            var rows = ReadRegisterEntries(account);
+            var byDate = rows
+                .GroupBy(r => r.Date.Date)
+                .ToDictionary(g => g.Key, g => g.Last().Balance);
+
+            decimal current = 0m;
+            var lastBefore = rows.Where(r => r.Date.Date <= start.Date).OrderBy(r => r.Date).LastOrDefault();
+            if (lastBefore != null) current = lastBefore.Balance;
+
+            var result = new Dictionary<DateTime, decimal>();
+            for (var d = start.Date; d <= end.Date; d = d.AddDays(1))
+            {
+                if (byDate.TryGetValue(d, out var b))
+                    current = b;
+
+                result[d] = current;
+            }
+            return result;
+        }
+
+        private Dictionary<DateTime, decimal> GetMonthActualDailyBalances(string account, int year, int month)
+        {
+            var start = new DateTime(year, month, 1).Date;
+            var end = new DateTime(year, month, DateTime.DaysInMonth(year, month)).Date;
+
+            var daily = CalculateDailyBalances(account, start, end);
+
+            if (IsCard(account))
+            {
+                var keys = daily.Keys.ToList();
+                foreach (var k in keys)
+                    daily[k] = ClampCardBalance(daily[k]);
+            }
+
+            return daily;
+        }
+
+        // ===== Forecast reading & expansion =====
+        private List<ForecastEntry> ReadForecastEntriesExpanded(DateTime from, DateTime to)
+        {
+            string forecastFile = FilePathHelper.GetKukiFinancePath("ForecastExpenses.csv");
+            var expanded = new List<ForecastEntry>();
+            if (!File.Exists(forecastFile)) return expanded;
+
+            var lines = File.ReadAllLines(forecastFile);
+            if (lines.Length < 2) return expanded;
+
+            foreach (var raw in lines.Skip(1))
+            {
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+                var parts = raw.Split(',');
+                if (parts.Length < 7) continue;
+
+                var row = new ForecastExpenseRow
+                {
+                    Account = parts[0].Trim(),
+                    Frequency = parts[1].Trim(),
+                    Month = parts[3].Trim(),
+                    Category = parts[5].Trim()
+                };
+
+                int.TryParse(parts[2].Trim(), out var yr);
+                row.Year = yr;
+
+                int.TryParse(parts[4].Trim(), out var day);
+                row.Day = day <= 0 ? 1 : day;
+
+                if (!decimal.TryParse(parts[6].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var amt))
+                    continue;
+
+                row.Amount = amt;
+
+                ExpandForecastRow(row, from, to, expanded);
+            }
+
+            return expanded.OrderBy(e => e.Date).ToList();
+        }
+
+        private void ExpandForecastRow(ForecastExpenseRow row, DateTime from, DateTime to, List<ForecastEntry> output)
+        {
+            string freq = (row.Frequency ?? "").Trim();
+
+            if (freq.Equals("Once", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!TryMonthNumber(row.Month, out var m)) return;
+                int dom = Math.Min(row.Day, DateTime.DaysInMonth(row.Year, m));
+                var dt = new DateTime(row.Year, m, dom).Date;
+
+                if (dt >= from.Date && dt <= to.Date)
+                    output.Add(new ForecastEntry { Date = dt, Account = row.Account, Category = row.Category, Amount = row.Amount });
+
+                return;
+            }
+
+            if (freq.Equals("Monthly", StringComparison.OrdinalIgnoreCase))
+            {
+                if (row.Month.Equals("All", StringComparison.OrdinalIgnoreCase))
+                {
+                    var cursor = new DateTime(from.Year, from.Month, 1);
+                    var endMonth = new DateTime(to.Year, to.Month, 1);
+
+                    while (cursor <= endMonth)
+                    {
+                        int dom = Math.Min(row.Day, DateTime.DaysInMonth(cursor.Year, cursor.Month));
+                        var dt = new DateTime(cursor.Year, cursor.Month, dom).Date;
+
+                        if (cursor.Year >= row.Year && dt >= from.Date && dt <= to.Date)
+                            output.Add(new ForecastEntry { Date = dt, Account = row.Account, Category = row.Category, Amount = row.Amount });
+
+                        cursor = cursor.AddMonths(1);
+                    }
+                }
+                else
+                {
+                    if (!TryMonthNumber(row.Month, out var m)) return;
+
+                    for (int y = from.Year; y <= to.Year; y++)
+                    {
+                        if (y < row.Year) continue;
+                        int dom = Math.Min(row.Day, DateTime.DaysInMonth(y, m));
+                        var dt = new DateTime(y, m, dom).Date;
+
+                        if (dt >= from.Date && dt <= to.Date)
+                            output.Add(new ForecastEntry { Date = dt, Account = row.Account, Category = row.Category, Amount = row.Amount });
+                    }
+                }
+                return;
+            }
+
+            if (freq.Equals("Annual", StringComparison.OrdinalIgnoreCase) ||
+                freq.Equals("Yearly", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!TryMonthNumber(row.Month, out var m)) return;
+
+                for (int y = from.Year; y <= to.Year; y++)
+                {
+                    if (y < row.Year) continue;
+                    int dom = Math.Min(row.Day, DateTime.DaysInMonth(y, m));
+                    var dt = new DateTime(y, m, dom).Date;
+
+                    if (dt >= from.Date && dt <= to.Date)
+                        output.Add(new ForecastEntry { Date = dt, Account = row.Account, Category = row.Category, Amount = row.Amount });
+                }
+                return;
+            }
+        }
+
+        private bool TryMonthNumber(string monthNameOrAll, out int month)
+        {
+            month = 0;
+            if (string.IsNullOrWhiteSpace(monthNameOrAll)) return false;
+            if (monthNameOrAll.Equals("All", StringComparison.OrdinalIgnoreCase)) return false;
+
+            if (DateTime.TryParseExact(monthNameOrAll, "MMMM", CultureInfo.CurrentCulture, DateTimeStyles.None, out var dt))
+            {
+                month = dt.Month;
+                return true;
+            }
+
+            if (int.TryParse(monthNameOrAll, out var m) && m >= 1 && m <= 12)
+            {
+                month = m;
+                return true;
+            }
+
+            return false;
+        }
+
+        // ===== Forecast balances =====
+        private Dictionary<DateTime, (decimal balance, List<ForecastEntry> forecasts)> CalculateForecastBalances(
+            string account,
+            List<ForecastEntry> baseForecasts,
+            List<ForecastEntry> derivedBmoPayments)
+        {
+            var startDate = DateTime.Today.Date;
+            var endDate = DateTime.Today.AddYears(1).Date;
+
+            var dailyActual = CalculateDailyBalances(account, startDate, startDate);
+            decimal running = dailyActual.TryGetValue(startDate, out var b0) ? b0 : 0m;
+
+            var forecasts = new List<ForecastEntry>();
+            forecasts.AddRange(baseForecasts);
+
+            if (account.Equals("BMO Check", StringComparison.OrdinalIgnoreCase))
+                forecasts.AddRange(derivedBmoPayments);
+
+            if (IsCard(account))
+            {
+                var mirrored = derivedBmoPayments
+                    .Select(d =>
+                    {
+                        var cn = GetCardNameFromCategory(d.Category);
+                        if (string.IsNullOrWhiteSpace(cn)) return null;
+                        if (!cn.Equals(account, StringComparison.OrdinalIgnoreCase)) return null;
+
+                        return new ForecastEntry
+                        {
+                            Date = d.Date,
+                            Account = account,
+                            Category = d.Category,
+                            Amount = -d.Amount
+                        };
+                    })
+                    .Where(x => x != null)
+                    .ToList();
+
+                forecasts.AddRange(mirrored);
+            }
+
+            var byDate = forecasts
                 .Where(f => f.Account.Equals(account, StringComparison.OrdinalIgnoreCase))
-                .GroupBy(f => f.Date)
+                .GroupBy(f => f.Date.Date)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
-            var result = new Dictionary<DateTime, (decimal balance, List<ForecastEntry>)>();
-            decimal runningBalance = currentBalance;
-            DateTime todayLocal = DateTime.Today;
-            DateTime endDate = todayLocal.AddYears(1);
+            var result = new Dictionary<DateTime, (decimal balance, List<ForecastEntry> forecasts)>();
 
-            for (var date = todayLocal.AddDays(1); date <= endDate; date = date.AddDays(1))
+            for (var d = startDate; d <= endDate; d = d.AddDays(1))
             {
-                if (forecastByDate.ContainsKey(date))
+                if (byDate.TryGetValue(d, out var list))
                 {
-                    foreach (var entry in forecastByDate[date])
-                        runningBalance += entry.Amount;
+                    foreach (var f in list)
+                        running += f.Amount;
+
+                    if (IsCard(account))
+                        running = ClampCardBalance(running);
+
+                    result[d] = (running, list);
                 }
-                result[date] = (runningBalance, forecastByDate.ContainsKey(date) ? forecastByDate[date] : new List<ForecastEntry>());
+                else
+                {
+                    if (IsCard(account))
+                        running = ClampCardBalance(running);
+
+                    result[d] = (running, new List<ForecastEntry>());
+                }
             }
 
             return result;
         }
 
-        // useCardForecastBalancesForFuture:
-        //  - true  => future-cycle payments are based on the card's Forecast Balance
-        //             on the billing cutoff date (what you see on the card calendar)
-        //  - false => future-cycle payments are based on the sum of forecast rows
+        // ===== Chart helpers =====
+        private List<(DateTime WeekEndDate, decimal Balance)> BuildActualWeeklyBalances(string account, int year)
+        {
+            var list = new List<(DateTime, decimal)>();
+
+            var yearStart = new DateTime(year, 1, 1);
+            var yearEnd = new DateTime(year, 12, 31);
+
+            var daily = CalculateDailyBalances(account, yearStart, yearEnd);
+
+            for (var d = yearStart; d <= yearEnd; d = d.AddDays(1))
+            {
+                if (d.DayOfWeek != DayOfWeek.Saturday) continue;
+                if (d > DateTime.Today) break;
+
+                if (daily.TryGetValue(d.Date, out var bal))
+                    list.Add((d.Date, bal));
+            }
+
+            return list;
+        }
+
+        private List<(DateTime WeekEndDate, decimal Balance)> BuildForecastWeeklyBalances(string account)
+        {
+            var start = DateTime.Today.Date;
+            var end = DateTime.Today.AddYears(1).Date;
+
+            var baseForecasts = ReadForecastEntriesExpanded(DateTime.Today.AddMonths(-3), DateTime.Today.AddYears(1));
+            var derived = ComputeCardPaymentsForBmo(baseForecasts, DateTime.Today, DateTime.Today.AddYears(1), true);
+            var dailyForecast = CalculateForecastBalances(account, baseForecasts, derived);
+
+            var list = new List<(DateTime, decimal)>();
+
+            var firstSat = start;
+            while (firstSat.DayOfWeek != DayOfWeek.Saturday) firstSat = firstSat.AddDays(1);
+
+            for (var d = firstSat; d <= end; d = d.AddDays(7))
+            {
+                if (dailyForecast.TryGetValue(d.Date, out var fb))
+                    list.Add((d.Date, fb.balance));
+            }
+
+            return list;
+        }
+
+        // =========================================================================================
+        // ✅ MISSING METHODS ADDED HERE: ComputeCardPaymentsForBmo + simulation helpers
+        // =========================================================================================
+
         private List<ForecastEntry> ComputeCardPaymentsForBmo(
-    List<ForecastEntry> allForecasts,
-    DateTime from,
-    DateTime to,
-    bool useCardForecastBalancesForFuture)
+            List<ForecastEntry> allForecasts,
+            DateTime from,
+            DateTime to,
+            bool useCardForecastBalancesForFuture)
         {
             var results = new List<ForecastEntry>();
 
-            // Card metadata: due day in the month of payment
             var cards = new[]
             {
-        new { Name = "AMEX",       DueDay = 8  },
-        new { Name = "Visa",       DueDay = 26 },
-        new { Name = "MasterCard", DueDay = 14 }
-    };
+                new { Name = "AMEX",       DueDay = 8  },
+                new { Name = "Visa",       DueDay = 26 },
+                new { Name = "MasterCard", DueDay = 14 }
+            };
 
-            DateTime today = DateTime.Today;
+            // account -> date -> sum(amount)
+            var forecastByCardByDate = allForecasts
+                .Where(f => !string.IsNullOrWhiteSpace(f.Account))
+                .GroupBy(f => f.Account, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.GroupBy(x => x.Date.Date)
+                          .ToDictionary(gg => gg.Key, gg => gg.Sum(x => x.Amount)),
+                    StringComparer.OrdinalIgnoreCase);
 
-            // We work month-by-month over the requested range
+            // Future simulated payment amounts for due dates whose cutoffs are in the future
+            var tuples = cards.Select(c => (c.Name, c.DueDay)).ToList();
+            var futurePaymentAmounts = useCardForecastBalancesForFuture
+                ? ComputeFutureCardStatementAmounts(allForecasts, tuples, DateTime.Today, to)
+                : null;
+
+            DateTime today = DateTime.Today.Date;
+
             var cursor = new DateTime(from.Year, from.Month, 1);
             var endMonth = new DateTime(to.Year, to.Month, 1);
 
@@ -725,97 +824,56 @@ namespace KukiFinance.Pages
                 foreach (var card in cards)
                 {
                     int dueDay = Math.Min(card.DueDay, DateTime.DaysInMonth(year, month));
-                    var dueDate = new DateTime(year, month, dueDay);
+                    var dueDate = new DateTime(year, month, dueDay).Date;
 
-                    // Only generate payments inside the [from, to] horizon
-                    if (dueDate < from || dueDate > to)
-                        continue;
+                    if (dueDate < from.Date || dueDate > to.Date) continue;
+                    if (dueDate <= today) continue; // don’t generate payments for past/today
 
-                    // Determine billing window for this card / due month
-                    DateTime billingStart = GetBillingStartForCard(card.Name, year, month);
-                    DateTime billingEnd = GetBillingEndForCard(card.Name, year, month);
+                    DateTime billingEnd = GetBillingEndForCard(card.Name, year, month).Date;
 
-                    decimal amountDue = 0m;
+                    decimal payAmt = 0m;
 
-                    // --- CURRENT MONTH: derive amount due from card register (plus any forecast charges in the same window) ---
-                    if (dueDate.Year == today.Year && dueDate.Month == today.Month)
+                    // CASE 1: cutoff already happened (current-month due date)
+                    if (billingEnd <= today)
                     {
-                        var cardRows = ReadCardRegister(card.Name);
+                        // Statement due comes from actual cutoff balance
+                        var cutoffBal = ClampCardBalance(GetActualBalanceOnOrBefore(card.Name, billingEnd));
+                        var stmtDue = Math.Max(0m, -cutoffBal);
 
-                        // Try using the last Balance on or before the cutoff
-                        decimal? balanceOnCutoff = GetLastBalanceOnOrBefore(cardRows, billingEnd);
-                        if (balanceOnCutoff.HasValue)
+                        if (stmtDue > 0m)
                         {
-                            amountDue = Math.Abs(balanceOnCutoff.Value);
-                        }
-                        else
-                        {
-                            // No balance column/row – fall back to summing transactions and forecasts
-                            decimal txSum = SumTransactionsBetweenExcludingPayments(cardRows, billingStart, billingEnd);
+                            decimal todayBal = ClampCardBalance(GetActualBalanceOnOrBefore(card.Name, today));
 
-                            decimal forecastSum = allForecasts
-                                .Where(f => f.Account.Equals(card.Name, StringComparison.OrdinalIgnoreCase)
-                                            && f.Date >= billingStart
-                                            && f.Date <= billingEnd)
-                                .Sum(f => f.Amount);
+                            var perDate = forecastByCardByDate.TryGetValue(card.Name, out var m)
+                                ? m
+                                : new Dictionary<DateTime, decimal>();
 
-                            amountDue = Math.Abs(txSum + forecastSum);
-                        }
-                    }
-                    // --- FUTURE MONTHS ---
-                    else if (dueDate > today)
-                    {
-                        if (useCardForecastBalancesForFuture)
-                        {
-                            // Use the card's Forecast Balance on the billing cutoff date
-                            // (the exact number shown on the Calendar page for that card).
-                            var cardForecastBalances = CalculateForecastBalances(card.Name);
+                            // balance on due date before payment
+                            var balOnDueBeforePay = ProjectCardBalanceToDate(today, dueDate, perDate, todayBal);
+                            var needed = Math.Max(0m, -balOnDueBeforePay);
 
-                            if (cardForecastBalances.TryGetValue(billingEnd, out var fb))
-                            {
-                                amountDue = Math.Abs(fb.balance);
-                            }
-                            else
-                            {
-                                // Fallback: sum forecast rows in the billing window, just in case
-                                decimal forecastSum = allForecasts
-                                    .Where(f => f.Account.Equals(card.Name, StringComparison.OrdinalIgnoreCase)
-                                                && f.Date >= billingStart
-                                                && f.Date <= billingEnd)
-                                    .Sum(f => f.Amount);
-
-                                amountDue = Math.Abs(forecastSum);
-                            }
-                        }
-                        else
-                        {
-                            // Used only inside CalculateForecastBalances to avoid recursion:
-                            // derive an approximate amount from forecast rows in this billing window.
-                            decimal forecastSum = allForecasts
-                                .Where(f => f.Account.Equals(card.Name, StringComparison.OrdinalIgnoreCase)
-                                            && f.Date >= billingStart
-                                            && f.Date <= billingEnd)
-                                .Sum(f => f.Amount);
-
-                            amountDue = Math.Abs(forecastSum);
+                            payAmt = Math.Min(stmtDue, needed);
                         }
                     }
                     else
                     {
-                        // Past due dates: do not generate anything. Past real payments live in the BMO register CSV.
-                        continue;
+                        // CASE 2: cutoff is in the future (future months) -> use simulator computed pay amount
+                        if (futurePaymentAmounts != null
+                            && futurePaymentAmounts.TryGetValue(card.Name, out var byDue)
+                            && byDue.TryGetValue(dueDate, out var simulatedPay))
+                        {
+                            payAmt = simulatedPay;
+                        }
                     }
 
-                    if (amountDue <= 0m)
-                        continue;
+                    if (payAmt <= 0m) continue;
 
-                    // BMO sees payments as withdrawals (negative in BMO Check)
                     results.Add(new ForecastEntry
                     {
                         Date = dueDate,
                         Account = "BMO Check",
                         Category = $"Card Payment - {card.Name}",
-                        Amount = -amountDue
+                        Amount = -payAmt
                     });
                 }
 
@@ -825,274 +883,172 @@ namespace KukiFinance.Pages
             return results.OrderBy(r => r.Date).ToList();
         }
 
-
-
-        // Helper to compute billing start for a card, relative to the due month
-        // AMEX:      start = 25th of month (M-2)
-        // Visa/MC:   start = 2nd of month (M-1)
-        private DateTime GetBillingStartForCard(string cardName, int dueYear, int dueMonth)
+        // Projects card balance from startDate to targetDate (inclusive), applying daily forecast deltas.
+        // Cards are clamped to never be positive.
+        private decimal ProjectCardBalanceToDate(
+            DateTime startDate,
+            DateTime targetDate,
+            Dictionary<DateTime, decimal> forecastByDate,
+            decimal startBalance)
         {
-            if (cardName.Equals("AMEX", StringComparison.OrdinalIgnoreCase))
+            decimal running = ClampCardBalance(startBalance);
+
+            for (var d = startDate.Date.AddDays(1); d <= targetDate.Date; d = d.AddDays(1))
             {
-                var startMonthDate = new DateTime(dueYear, dueMonth, 1).AddMonths(-2);
-                int startDay = Math.Min(25, DateTime.DaysInMonth(startMonthDate.Year, startMonthDate.Month));
-                return new DateTime(startMonthDate.Year, startMonthDate.Month, startDay);
-            }
-            else // Visa & MasterCard
-            {
-                var startMonthDate = new DateTime(dueYear, dueMonth, 1).AddMonths(-1);
-                int startDay = Math.Min(2, DateTime.DaysInMonth(startMonthDate.Year, startMonthDate.Month));
-                return new DateTime(startMonthDate.Year, startMonthDate.Month, startDay);
-            }
-        }
+                if (forecastByDate.TryGetValue(d, out var delta))
+                    running += delta;
 
-        // Represents a row in a credit-card CSV register
-        private record CardRow(DateTime Date, decimal Amount, decimal? Balance, string Description);
-
-        private List<CardRow> ReadCardRegister(string cardName)
-        {
-            string basePath = FilePathHelper.GetKukiFinancePath("");
-            string fileName = cardName switch
-            {
-                "AMEX" => "AMEXCurrent.csv",
-                "Visa" => "VisaCurrent.csv",
-                "MasterCard" => "MasterCardCurrent.csv",
-                _ => null
-            };
-            if (fileName == null) return new List<CardRow>();
-
-            string csvFile = Path.Combine(basePath, fileName);
-            if (!File.Exists(csvFile)) return new List<CardRow>();
-
-            var lines = File.ReadAllLines(csvFile)
-                            .Where(l => !string.IsNullOrWhiteSpace(l))
-                            .ToArray();
-            if (lines.Length < 2) return new List<CardRow>();
-
-            var headers = lines[0].Split(',');
-
-            int dateIdx = Array.FindIndex(headers, h => h.Trim().Equals("Date", StringComparison.OrdinalIgnoreCase));
-            int amtIdx = Array.FindIndex(headers, h => h.Trim().Equals("Amount", StringComparison.OrdinalIgnoreCase));
-            int balIdx = Array.FindIndex(headers, h => h.Trim().Equals("Balance", StringComparison.OrdinalIgnoreCase));
-            int descIdx = Array.FindIndex(headers, h =>
-                h.Trim().Equals("Description", StringComparison.OrdinalIgnoreCase) ||
-                h.Trim().Equals("Desc", StringComparison.OrdinalIgnoreCase) ||
-                h.Trim().Equals("Memo", StringComparison.OrdinalIgnoreCase) ||
-                h.Trim().Equals("Category", StringComparison.OrdinalIgnoreCase));
-
-            var result = new List<CardRow>();
-            string[] formats = { "yyyy-MM-dd", "MM/dd/yyyy", "M/d/yyyy" };
-
-            foreach (var line in lines.Skip(1))
-            {
-                var parts = line.Split(',');
-                if (parts.Length <= Math.Max(dateIdx, amtIdx)) continue;
-
-                if (!DateTime.TryParseExact(parts[dateIdx].Trim(), formats,
-                        CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt)
-                    && !DateTime.TryParse(parts[dateIdx].Trim(), out dt))
-                {
-                    continue;
-                }
-
-                if (!decimal.TryParse(parts[amtIdx].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var amt))
-                    continue;
-
-                decimal? bal = null;
-                if (balIdx >= 0 && parts.Length > balIdx &&
-                    decimal.TryParse(parts[balIdx].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
-                {
-                    bal = b;
-                }
-
-                string desc = descIdx >= 0 && parts.Length > descIdx
-                    ? parts[descIdx].Trim()
-                    : string.Empty;
-
-                result.Add(new CardRow(dt, amt, bal, desc));
-            }
-
-            return result.OrderBy(r => r.Date).ToList();
-        }
-
-        // Last known Balance value on or before a given date
-        private decimal? GetLastBalanceOnOrBefore(List<CardRow> rows, DateTime date)
-        {
-            var withBalance = rows
-                .Where(r => r.Balance.HasValue && r.Date <= date)
-                .OrderBy(r => r.Date)
-                .ToList();
-
-            if (!withBalance.Any()) return null;
-            return withBalance.Last().Balance;
-        }
-
-        // Sum card register transactions between start and end, excluding rows that are "payments"
-        // (we don’t want to treat existing payments as part of the amount due)
-        private decimal SumTransactionsBetweenExcludingPayments(List<CardRow> rows, DateTime start, DateTime end)
-        {
-            return rows
-                .Where(r => r.Date >= start && r.Date <= end && !IsPayment(r.Description))
-                .Sum(r => r.Amount);
-        }
-
-        private bool IsPayment(string description)
-        {
-            if (string.IsNullOrWhiteSpace(description)) return false;
-
-            return description.Contains("Payment", StringComparison.OrdinalIgnoreCase) ||
-                   description.Contains("Pmt", StringComparison.OrdinalIgnoreCase) ||
-                   description.Contains("Card Payment", StringComparison.OrdinalIgnoreCase);
-        }
-
-        // Extract card name from category "Card Payment - {CardName}"
-        private string GetCardNameFromCategory(string category)
-        {
-            if (string.IsNullOrWhiteSpace(category)) return null;
-            const string prefix = "Card Payment - ";
-            if (category.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                return category.Substring(prefix.Length).Trim();
-            return null;
-        }
-
-
-        // Helper to compute billing end (cutoff) for a card, relative to the due month
-        // AMEX:      end = 24th of previous month (M-1)
-        // Visa/MC:   end = 1st of due month (M)
-        private DateTime GetBillingEndForCard(string cardName, int dueYear, int dueMonth)
-        {
-            if (cardName.Equals("AMEX", StringComparison.OrdinalIgnoreCase))
-            {
-                var endMonthDate = new DateTime(dueYear, dueMonth, 1).AddMonths(-1);
-                int endDay = Math.Min(24, DateTime.DaysInMonth(endMonthDate.Year, endMonthDate.Month));
-                return new DateTime(endMonthDate.Year, endMonthDate.Month, endDay);
-            }
-            else // Visa & MasterCard
-            {
-                var endMonthDate = new DateTime(dueYear, dueMonth, 1);
-                int endDay = Math.Min(1, DateTime.DaysInMonth(endMonthDate.Year, endMonthDate.Month));
-                return new DateTime(endMonthDate.Year, endMonthDate.Month, endDay);
-            }
-        }
-
-        // Forecast the card account balance on a given date by applying forecast entries for that card only.
-        // This avoids circular dependency on CalculateForecastBalances when computing card-side derived amounts.
-        private decimal GetCardForecastBalanceOnCutoff(string cardName, DateTime cutoffDate)
-        {
-            // Prefer last known register balance on or before today as the starting point.
-            var cardRows = ReadCardRegister(cardName);
-            var withBalanceOnOrBeforeToday = cardRows
-                .Where(r => r.Balance.HasValue && r.Date <= DateTime.Today)
-                .OrderBy(r => r.Date)
-                .ToList();
-
-            decimal running;
-            DateTime cursor;
-
-            if (withBalanceOnOrBeforeToday.Any())
-            {
-                // Start from the last real register balance and apply forecasts after that date.
-                var last = withBalanceOnOrBeforeToday.Last();
-                running = last.Balance.Value;
-                cursor = last.Date.AddDays(1);
-            }
-            else
-            {
-                // No register balance available — use today's calculated balance as a reasonable starting point.
-                var today = DateTime.Today;
-                var todayBalances = CalculateDailyBalances(cardName, today.Year, today.Month);
-                running = todayBalances.ContainsKey(today) ? todayBalances[today] : todayBalances.Values.LastOrDefault();
-                cursor = today.AddDays(1);
-            }
-
-            // Apply only base forecast entries that target the card (no derived BMO or mirrored card entries).
-            // This prevents circular dependency and avoids double-counting.
-            var cardForecasts = ReadForecastEntries()
-                .Where(f => f.Account.Equals(cardName, StringComparison.OrdinalIgnoreCase))
-                .GroupBy(f => f.Date)
-                .ToDictionary(g => g.Key, g => g.ToList());
-
-            // Apply forecasts from cursor up to and including cutoffDate
-            if (cursor <= cutoffDate)
-            {
-                for (var dt = cursor; dt <= cutoffDate; dt = dt.AddDays(1))
-                {
-                    if (cardForecasts.TryGetValue(dt, out var list))
-                    {
-                        foreach (var f in list)
-                            running += f.Amount;
-                    }
-                }
+                running = ClampCardBalance(running);
             }
 
             return running;
         }
 
-        private async void OnChartClicked(object sender, EventArgs e)
+        private Dictionary<string, Dictionary<DateTime, decimal>> ComputeFutureCardStatementAmounts(
+            List<ForecastEntry> allForecasts,
+            IEnumerable<(string Name, int DueDay)> cards,
+            DateTime horizonStart,
+            DateTime horizonEnd)
         {
-            if (AccountPicker.SelectedItem == null || YearPicker.SelectedItem == null)
-                return;
+            var today = horizonStart.Date;
 
-            string account = AccountPicker.SelectedItem.ToString();
-            int year = (int)YearPicker.SelectedItem;
+            // Build a list of due dates + cutoff dates
+            var dueItems = new List<(string card, DateTime dueDate, DateTime cutoffDate)>();
+            var cursor = new DateTime(today.Year, today.Month, 1);
+            var endMonth = new DateTime(horizonEnd.Year, horizonEnd.Month, 1);
 
-            var actualWeeklyBalances = new List<(DateTime WeekEndDate, decimal Balance)>();
-            for (int month = 1; month <= 12; month++)
+            while (cursor <= endMonth)
             {
-                var balances = CalculateDailyBalances(account, year, month);
-                var saturdays = Enumerable.Range(1, DateTime.DaysInMonth(year, month))
-                    .Select(day => new DateTime(year, month, day))
-                    .Where(date => date.DayOfWeek == DayOfWeek.Saturday && date <= DateTime.Today);
+                int year = cursor.Year;
+                int month = cursor.Month;
 
-                foreach (var saturday in saturdays)
+                foreach (var (name, dueDayRaw) in cards)
                 {
-                    decimal balance = balances.ContainsKey(saturday) ? balances[saturday] : balances.Values.LastOrDefault();
-                    actualWeeklyBalances.Add((saturday, balance));
+                    int dueDay = Math.Min(dueDayRaw, DateTime.DaysInMonth(year, month));
+                    var dueDate = new DateTime(year, month, dueDay).Date;
+
+                    if (dueDate <= today) continue;
+                    if (dueDate > horizonEnd.Date) continue;
+
+                    var cutoff = GetBillingEndForCard(name, year, month).Date;
+                    dueItems.Add((name, dueDate, cutoff));
+                }
+
+                cursor = cursor.AddMonths(1);
+            }
+
+            var result = new Dictionary<string, Dictionary<DateTime, decimal>>(StringComparer.OrdinalIgnoreCase);
+            if (dueItems.Count == 0) return result;
+
+            var simEnd = dueItems.Max(x => x.dueDate).Date;
+
+            // account -> date -> sum(amount)
+            var forecastByCardByDate = allForecasts
+                .Where(f => !string.IsNullOrWhiteSpace(f.Account))
+                .GroupBy(f => f.Account, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.GroupBy(x => x.Date.Date)
+                          .ToDictionary(gg => gg.Key, gg => gg.Sum(x => x.Amount)),
+                    StringComparer.OrdinalIgnoreCase);
+
+            // (card, cutoff) -> due dates that share that cutoff
+            var cutoffToDueDates = dueItems
+                .GroupBy(x => (x.card, x.cutoffDate))
+                .ToDictionary(g => g.Key, g => g.Select(x => x.dueDate).Distinct().ToList());
+
+            // (card, due) -> cutoff
+            var dueToCutoff = dueItems.ToDictionary(x => (x.card, x.dueDate), x => x.cutoffDate);
+
+            // Running balances start at today's actual balance (clamped)
+            var running = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (name, _) in cards)
+            {
+                running[name] = ClampCardBalance(GetActualBalanceOnOrBefore(name, today));
+                result[name] = new Dictionary<DateTime, decimal>();
+            }
+
+            // statement due captured at cutoff: max(0, -balanceAtCutoff)
+            var statementDueAtCutoff = new Dictionary<(string card, DateTime cutoff), decimal>();
+
+            // Seed statement dues for cutoffs already in the past (so current-month due dates can be paid)
+            foreach (var grp in cutoffToDueDates.Keys)
+            {
+                var cardName = grp.card;
+                var cutoffDate = grp.cutoffDate;
+
+                if (cutoffDate < today)
+                {
+                    var balAtCutoff = ClampCardBalance(GetActualBalanceOnOrBefore(cardName, cutoffDate));
+                    var stmtDue = Math.Max(0m, -balAtCutoff);
+                    statementDueAtCutoff[(cardName, cutoffDate)] = stmtDue;
                 }
             }
 
-            List<(DateTime WeekEndDate, decimal Balance)> forecastWeeklyBalances = new();
-
-            if (account == "BMO Check")
+            for (var d = today.AddDays(1); d <= simEnd; d = d.AddDays(1))
             {
-                DateTime firstForecastSaturday = DateTime.Today.AddDays(1);
-                while (firstForecastSaturday.DayOfWeek != DayOfWeek.Saturday)
-                    firstForecastSaturday = firstForecastSaturday.AddDays(1);
+                foreach (var (name, _) in cards)
+                {
+                    // Apply daily forecasts
+                    if (forecastByCardByDate.TryGetValue(name, out var byDate) && byDate.TryGetValue(d.Date, out var amt))
+                        running[name] += amt;
 
-                var forecastBalances = CalculateForecastBalances(account);
-                var forecastSaturdays = new List<DateTime>();
-                for (var dt = firstForecastSaturday; dt <= DateTime.Today.AddYears(1); dt = dt.AddDays(7))
-                    forecastSaturdays.Add(dt);
+                    // enforce "never positive"
+                    running[name] = ClampCardBalance(running[name]);
 
-                forecastWeeklyBalances = forecastSaturdays
-                    .Select(date => (date, forecastBalances.ContainsKey(date) ? forecastBalances[date].balance : 0m))
-                    .ToList();
+                    // Capture statement due at cutoff
+                    if (cutoffToDueDates.ContainsKey((name, d.Date)))
+                    {
+                        var stmtDue = Math.Max(0m, -running[name]);
+                        statementDueAtCutoff[(name, d.Date)] = stmtDue;
+                    }
+
+                    // On due date: pay min(statementDue, needed)
+                    if (dueToCutoff.TryGetValue((name, d.Date), out var cutoff))
+                    {
+                        statementDueAtCutoff.TryGetValue((name, cutoff), out var stmtDue);
+
+                        var needed = Math.Max(0m, -running[name]);
+                        var payAmt = Math.Min(stmtDue, needed);
+
+                        if (payAmt > 0m)
+                        {
+                            running[name] += payAmt;
+                            running[name] = ClampCardBalance(running[name]);
+                        }
+
+                        result[name][d.Date] = payAmt;
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        private DateTime GetBillingEndForCard(string cardName, int dueYear, int dueMonth)
+        {
+            if (cardName.Equals("AMEX", StringComparison.OrdinalIgnoreCase))
+            {
+                var endMonthDate = new DateTime(dueYear, dueMonth, 1).AddMonths(-1);
+                int dom = Math.Min(24, DateTime.DaysInMonth(endMonthDate.Year, endMonthDate.Month));
+                return new DateTime(endMonthDate.Year, endMonthDate.Month, dom);
             }
             else
             {
-                // Only show actuals up to the last Saturday ≤ today
-                if (actualWeeklyBalances.Count > 0)
-                {
-                    var lastActualSaturday = actualWeeklyBalances
-                        .Where(b => b.WeekEndDate <= DateTime.Today)
-                        .Select(b => b.WeekEndDate)
-                        .DefaultIfEmpty()
-                        .Max();
-
-                    actualWeeklyBalances = actualWeeklyBalances
-                        .Where(b => b.WeekEndDate <= lastActualSaturday)
-                        .ToList();
-                }
-                // forecastWeeklyBalances remains empty
+                int dom = Math.Min(1, DateTime.DaysInMonth(dueYear, dueMonth));
+                return new DateTime(dueYear, dueMonth, dom);
             }
-
-            var chartPage = new ChartPage(account, year, actualWeeklyBalances, forecastWeeklyBalances);
-            await Navigation.PushModalAsync(chartPage);
         }
 
-        private async void ReturnButton_Clicked(object sender, EventArgs e)
+        private decimal GetActualBalanceOnOrBefore(string account, DateTime date)
         {
-            await Shell.Current.GoToAsync("//MainPage");
+            var rows = ReadRegisterEntries(account);
+            var last = rows
+                .Where(r => r.Date.Date <= date.Date)
+                .OrderBy(r => r.Date)
+                .LastOrDefault();
+
+            return last?.Balance ?? 0m;
         }
     }
 }

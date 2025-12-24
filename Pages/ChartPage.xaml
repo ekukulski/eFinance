@@ -1,24 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.Maui;assembly=LiveChartsCore.SkiaSharpView.Maui"
              x:Class="KukiFinance.Pages.ChartPage"
              Title="Account Balance Chart">
-    <VerticalStackLayout>
+    <Grid Padding="10" RowDefinitions="Auto,*,Auto" RowSpacing="10">
         <Label x:Name="TitleLabel"
-               FontSize="20"
-               FontAttributes="Bold"
-               HorizontalOptions="Center"
-               Margin="10"/>
-        <lvc:CartesianChart x:Name="BalanceChart"
-                            HeightRequest="400"
-                            WidthRequest="2400"
-                            HorizontalOptions="FillAndExpand"
-                            Margin="20"/>
-        <Button Text="Close"
-                Clicked="OnCloseClicked"
-                BackgroundColor="IndianRed"
-                HorizontalOptions="Center"
-                WidthRequest="96"
-                Margin="10"/>
-    </VerticalStackLayout>
+           Grid.Row="0"
+           FontSize="20"
+           FontAttributes="Bold"
+           HorizontalOptions="Center"
+           LineBreakMode="TailTruncation" />
+
+        <ScrollView Grid.Row="1"
+                Orientation="Horizontal"
+                HorizontalOptions="FillAndExpand"
+                VerticalOptions="FillAndExpand">
+            <lvc:CartesianChart x:Name="BalanceChart"
+                          HorizontalOptions="FillAndExpand"
+                          VerticalOptions="FillAndExpand"
+                          MinimumHeightRequest="450"
+                          MinimumWidthRequest="1400" />
+        </ScrollView>
+
+        <Button x:Name="ReturnButton"
+            Grid.Row="2"
+            Text="Return"
+            BackgroundColor="IndianRed"
+            TextColor="Black"
+            FontSize="16"
+            WidthRequest="120"
+            HeightRequest="40"
+            HorizontalOptions="Center"
+            Clicked="OnReturnClicked" />
+    </Grid>
 </ContentPage>

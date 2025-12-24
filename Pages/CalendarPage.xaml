@@ -1,58 +1,77 @@
+<?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:local="clr-namespace:KukiFinance.Converters"
              x:Class="KukiFinance.Pages.CalendarPage"
              Title="Calendar">
 
-    <VerticalStackLayout>
-        <HorizontalStackLayout Padding="10" 
-                               Spacing="20">
+    <Grid RowDefinitions="Auto,*"
+          Padding="10"
+          RowSpacing="10">
+
+        <!-- Header -->
+        <Grid Grid.Row="0"
+              ColumnSpacing="14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
             <Picker x:Name="AccountPicker"
                     Title="Account"
+                    WidthRequest="160"
+                    VerticalOptions="Center"
+                    Grid.Column="0" />
+
+            <Picker x:Name="YearPicker"
+                    Title="Year"
+                    WidthRequest="110"
+                    VerticalOptions="Center"
+                    Grid.Column="1" />
+
+            <Picker x:Name="MonthPicker"
+                    Title="Month"
                     WidthRequest="140"
-                    VerticalOptions="Center" />
-            <Picker x:Name="YearPicker" 
-                    Title="Year" 
-                    WidthRequest="100"
-                    VerticalOptions="Center" />
-            <Picker x:Name="MonthPicker" 
-                    Title="Month" 
-                    WidthRequest="120"
-                    VerticalOptions="Center" />
-            <Button Text="Show Month" 
-                    x:Name="ShowMonthButton"
-                    BackgroundColor="DarkSeaGreen"
-                    TextColor="Black"
-                    FontSize="16"
-                    WidthRequest="150"
-                    HeightRequest="30"
-                    VerticalOptions="Center" 
-                    Clicked="OnShowMonthClicked"/>
+                    VerticalOptions="Center"
+                    Grid.Column="2" />
+
             <Button Text="Chart"
                     x:Name="ChartButton"
                     BackgroundColor="SteelBlue"
                     TextColor="White"
                     FontSize="16"
                     WidthRequest="120"
-                    HeightRequest="30"
+                    HeightRequest="34"
                     VerticalOptions="Center"
+                    Grid.Column="3"
                     Clicked="OnChartClicked"/>
+
             <Button Text="Return"
                     x:Name="ReturnButton"
                     BackgroundColor="IndianRed"
                     TextColor="Black"
                     FontSize="16"
                     WidthRequest="96"
-                    HeightRequest="30"
-                    VerticalOptions="Center" 
+                    HeightRequest="34"
+                    VerticalOptions="Center"
+                    Grid.Column="4"
                     Clicked="ReturnButton_Clicked" />
-        </HorizontalStackLayout>
-        <ScrollView Orientation="Both" 
-                    VerticalOptions="FillAndExpand">
-            <Grid x:Name="MonthGrid" 
-                  Padding="10"
-                  WidthRequest="1600"
-                  HeightRequest="1100"/>
-        </ScrollView>
-    </VerticalStackLayout>
+        </Grid>
+
+        <!-- Calendar Host -->
+        <Grid Grid.Row="1"
+              x:Name="CalendarHost"
+              HorizontalOptions="FillAndExpand"
+              VerticalOptions="FillAndExpand">
+
+            <Grid x:Name="MonthGrid"
+                  HorizontalOptions="FillAndExpand"
+                  VerticalOptions="FillAndExpand"
+                  RowSpacing="4"
+                  ColumnSpacing="4" />
+        </Grid>
+
+    </Grid>
 </ContentPage>

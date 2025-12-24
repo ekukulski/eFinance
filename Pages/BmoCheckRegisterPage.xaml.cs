@@ -357,98 +357,270 @@ namespace KukiFinance.Pages
             return nowLocal;
         }
 
-        // Compute card payments that should appear in BMO Check on card due dates.
-        // For each card/month: determine billingStart..billingEnd, compute amount due:
-        //  - Prefer using the card register Balance at billingEnd if available (last balance on or before billingEnd).
-        //  - Otherwise sum transactions in the billing window (charges + credits) excluding detected payments.
-        // If billingEnd is in the future, use the last available transaction date as effective end.
-        // NOTE: MasterCard billing window updated to match Visa per requested behavior (start = 2nd of prior month, end = 1st of month).
-        private List<(DateTime date, string category, decimal amount)> ComputeCardPaymentsForBmoFromExpanded(List<ForecastExpenseEntry> expanded, DateTime from, DateTime to)
+        // Billing window helpers (same as Calendar logic)
+        // AMEX:      start = 25th of month (M-2), end = 24th of month (M-1)
+        // Visa/MC:   start = 2nd of month (M-1), end = 1st of month (M)
+        private DateTime GetBillingStartForCard(string cardName, int dueYear, int dueMonth)
         {
-            var results = new List<(DateTime date, string category, decimal amount)>();
+            if (cardName.Equals("AMEX", StringComparison.OrdinalIgnoreCase))
+            {
+                var startMonthDate = new DateTime(dueYear, dueMonth, 1).AddMonths(-2);
+                int dom = Math.Min(25, DateTime.DaysInMonth(startMonthDate.Year, startMonthDate.Month));
+                return new DateTime(startMonthDate.Year, startMonthDate.Month, dom);
+            }
+            else
+            {
+                var startMonthDate = new DateTime(dueYear, dueMonth, 1).AddMonths(-1);
+                int dom = Math.Min(2, DateTime.DaysInMonth(startMonthDate.Year, startMonthDate.Month));
+                return new DateTime(startMonthDate.Year, startMonthDate.Month, dom);
+            }
+        }
+
+        private DateTime GetBillingEndForCard(string cardName, int dueYear, int dueMonth)
+        {
+            if (cardName.Equals("AMEX", StringComparison.OrdinalIgnoreCase))
+            {
+                var endMonthDate = new DateTime(dueYear, dueMonth, 1).AddMonths(-1);
+                int dom = Math.Min(24, DateTime.DaysInMonth(endMonthDate.Year, endMonthDate.Month));
+                return new DateTime(endMonthDate.Year, endMonthDate.Month, dom);
+            }
+            else
+            {
+                // Visa / MasterCard: end = 1st of due month
+                int dom = Math.Min(1, DateTime.DaysInMonth(dueYear, dueMonth));
+                return new DateTime(dueYear, dueMonth, dom);
+            }
+        }
+
+        /// <summary>
+        /// Simulate each card's daily balance forward (starting from today's register balance) using forecast charges from
+        /// ForecastExpenses.csv, capture the statement balance at each cycle cutoff date, then apply the payment on each due date.
+        /// This mirrors the Calendar "simulated statement" logic and avoids mismatches between what's shown and what's applied.
+        /// Returns: cardName -> (dueDate -> statementAmountDue)
+        /// </summary>
+        private Dictionary<string, Dictionary<DateTime, decimal>> ComputeFutureCardStatementAmountsFromExpanded(
+            List<ForecastExpenseEntry> expanded,
+            DateTime horizonStart,
+            DateTime horizonEnd)
+        {
+            var today = horizonStart.Date;
+
             var cards = new[]
             {
-                new { Name = "AMEX", DueDay = 8 },
-                new { Name = "Visa", DueDay = 26 },
+                new { Name = "AMEX",       DueDay = 8  },
+                new { Name = "Visa",       DueDay = 26 },
                 new { Name = "MasterCard", DueDay = 14 }
             };
+
+            // Build due dates + their cutoff dates
+            var dueItems = new List<(string card, DateTime dueDate, DateTime cutoffDate)>();
+            var cursor = new DateTime(today.Year, today.Month, 1);
+            var endMonth = new DateTime(horizonEnd.Year, horizonEnd.Month, 1);
+            while (cursor <= endMonth)
+            {
+                int y = cursor.Year;
+                int m = cursor.Month;
+
+                foreach (var c in cards)
+                {
+                    int dueDay = Math.Min(c.DueDay, DateTime.DaysInMonth(y, m));
+                    var dueDate = new DateTime(y, m, dueDay);
+
+                    if (dueDate <= today) continue;
+                    if (dueDate > horizonEnd) continue;
+
+                    var cutoff = GetBillingEndForCard(c.Name, y, m);
+                    dueItems.Add((c.Name, dueDate.Date, cutoff.Date));
+                }
+
+                cursor = cursor.AddMonths(1);
+            }
+
+            var result = new Dictionary<string, Dictionary<DateTime, decimal>>(StringComparer.OrdinalIgnoreCase);
+            if (dueItems.Count == 0) return result;
+
+            // We need to simulate until the last due date so we can apply payments for later cycles correctly.
+            var simEnd = dueItems.Max(x => x.dueDate).Date;
+
+            // Forecast lookup for fast daily adds (card -> date -> sum(amount))
+            var forecastByCardByDate = expanded
+                .Where(e => !string.IsNullOrWhiteSpace(e.Account))
+                .GroupBy(e => e.Account, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.GroupBy(x => x.Date.Date)
+                          .ToDictionary(gg => gg.Key, gg => gg.Sum(x => x.Amount)));
+
+            // cutoff -> list of due dates
+            var cutoffToDueDates = dueItems
+                .GroupBy(x => (x.card, x.cutoffDate))
+                .ToDictionary(g => g.Key, g => g.Select(x => x.dueDate).Distinct().ToList());
+
+            // dueDate -> cutoff
+            var dueToCutoff = dueItems.ToDictionary(x => (x.card, x.dueDate), x => x.cutoffDate);
+
+            // Starting balances per card at 'today'
+            var running = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            foreach (var c in cards)
+            {
+                var rows = ReadCardRegister(c.Name);
+                var balToday = GetLastBalanceOnOrBefore(rows, today);
+                if (balToday.HasValue)
+                {
+                    running[c.Name] = balToday.Value;
+                }
+                else
+                {
+                    // Fallback: sum non-payment transactions up to today (best-effort)
+                    var firstDate = rows.Any() ? rows.Min(r => r.Date) : today;
+                    running[c.Name] = SumTransactionsBetweenExcludingPayments(rows, firstDate, today);
+                }
+
+                result[c.Name] = new Dictionary<DateTime, decimal>();
+            }
+
+            // Remember statement balance captured at cutoff
+            var statementAtCutoff = new Dictionary<(string card, DateTime cutoff), decimal>();
+
+            for (var d = today.AddDays(1); d <= simEnd; d = d.AddDays(1))
+            {
+                foreach (var c in cards)
+                {
+                    // Apply forecast charges/credits for this day
+                    if (forecastByCardByDate.TryGetValue(c.Name, out var byDate) && byDate.TryGetValue(d.Date, out var amt))
+                        running[c.Name] += amt;
+
+                    // Capture statement at cutoff date
+                    var cutoffKey = (c.Name, d.Date);
+                    if (cutoffToDueDates.TryGetValue(cutoffKey, out var dueDates))
+                    {
+                        var stmt = Math.Max(0m, -running[c.Name]);
+                        statementAtCutoff[(c.Name, d.Date)] = stmt;
+
+                        foreach (var dd in dueDates)
+                            result[c.Name][dd] = stmt;
+                    }
+
+                    // Apply payment on due date, capped so card never goes positive
+                    var dueKey = (c.Name, d.Date);
+                    if (dueToCutoff.TryGetValue(dueKey, out var cutoff))
+                    {
+                        if (statementAtCutoff.TryGetValue((c.Name, cutoff), out var statementAtCutoffAmount))
+                        {
+                            // Amount needed to bring balance to zero (never more)
+                            var needed = Math.Max(0m, -running[c.Name]);
+                            var payAmt = Math.Min(statementAtCutoffAmount, needed);
+
+                            if (payAmt > 0m)
+                            {
+                                running[c.Name] += payAmt;
+
+                                // Enforce invariant: credit cards never > 0
+                                if (running[c.Name] > 0m)
+                                    running[c.Name] = 0m;
+                            }
+
+                            // Store the ACTUAL payment used on the due date
+                            result[c.Name][d.Date] = payAmt;
+                        }
+                    }
+
+                }
+            }
+
+            return result;
+        }
+
+        // Compute card payments that should appear in BMO Check on card due dates.
+        // Uses simulated statement logic for FUTURE due dates (beyond today) so the BMO register view and Calendar view agree.
+        private List<(DateTime date, string category, decimal amount)> ComputeCardPaymentsForBmoFromExpanded(
+            List<ForecastExpenseEntry> expanded,
+            DateTime from,
+            DateTime to)
+        {
+            var results = new List<(DateTime date, string category, decimal amount)>();
+
+            var cards = new[]
+            {
+                new { Name = "AMEX",       DueDay = 8  },
+                new { Name = "Visa",       DueDay = 26 },
+                new { Name = "MasterCard", DueDay = 14 }
+            };
+
+            var today = DateTime.Today;
+
+            // Precompute simulated statement amounts for future due dates once
+            var simulated = ComputeFutureCardStatementAmountsFromExpanded(expanded, today, to);
 
             foreach (var card in cards)
             {
                 var cursor = new DateTime(from.Year, from.Month, 1);
                 var endMonth = new DateTime(to.Year, to.Month, 1);
+
                 while (cursor <= endMonth)
                 {
                     int year = cursor.Year;
                     int month = cursor.Month;
+
                     int dueDay = Math.Min(card.DueDay, DateTime.DaysInMonth(year, month));
-                    var dueDate = new DateTime(year, month, dueDay);
+                    var dueDate = new DateTime(year, month, dueDay).Date;
 
-                    DateTime billingStart, billingEnd;
-                    if (card.Name == "AMEX")
+                    // Only include payments in the requested horizon and in the future (payments already happened are in the actual register)
+                    if (dueDate < from.Date || dueDate > to.Date || dueDate <= today)
                     {
-                        // AMEX billing: start = 25th of month (M-2), end = 24th of month (M-1)
-                        var startMonthDate = new DateTime(year, month, 1).AddMonths(-2);
-                        var endMonthDate = new DateTime(year, month, 1).AddMonths(-1);
-                        int startDay = Math.Min(25, DateTime.DaysInMonth(startMonthDate.Year, startMonthDate.Month));
-                        int endDay = Math.Min(24, DateTime.DaysInMonth(endMonthDate.Year, endMonthDate.Month));
-                        billingStart = new DateTime(startMonthDate.Year, startMonthDate.Month, startDay);
-                        billingEnd = new DateTime(endMonthDate.Year, endMonthDate.Month, endDay);
-                    }
-                    else if (card.Name == "Visa")
-                    {
-                        // Visa billing: start = 2nd of month (M-1), end = 1st of month M
-                        var startMonthDate = new DateTime(year, month, 1).AddMonths(-1);
-                        var endMonthDate = new DateTime(year, month, 1);
-                        int startDay = Math.Min(2, DateTime.DaysInMonth(startMonthDate.Year, startMonthDate.Month));
-                        int endDay = Math.Min(1, DateTime.DaysInMonth(endMonthDate.Year, endMonthDate.Month));
-                        billingStart = new DateTime(startMonthDate.Year, startMonthDate.Month, startDay);
-                        billingEnd = new DateTime(endMonthDate.Year, endMonthDate.Month, endDay);
-                    }
-                    else // MasterCard updated to same billing window as Visa (per request)
-                    {
-                        // MasterCard billing: start = 2nd of month (M-1), end = 1st of month M
-                        var startMonthDate = new DateTime(year, month, 1).AddMonths(-1);
-                        var endMonthDate = new DateTime(year, month, 1);
-                        int startDay = Math.Min(2, DateTime.DaysInMonth(startMonthDate.Year, startMonthDate.Month));
-                        int endDay = Math.Min(1, DateTime.DaysInMonth(endMonthDate.Year, endMonthDate.Month));
-                        billingStart = new DateTime(startMonthDate.Year, startMonthDate.Month, startDay);
-                        billingEnd = new DateTime(endMonthDate.Year, endMonthDate.Month, endDay);
+                        cursor = cursor.AddMonths(1);
+                        continue;
                     }
 
-                    // Forecast additions for the card inside the billing window should be included when statement not yet posted.
-                    var forecastSum = expanded
-                        .Where(f => f.Account.Equals(card.Name, StringComparison.OrdinalIgnoreCase)
-                                    && f.Date >= billingStart && f.Date <= billingEnd)
-                        .Sum(f => f.Amount);
-
-                    // Read card register transactions and balances
-                    var cardTx = ReadCardRegister(card.Name);
+                    DateTime billingStart = GetBillingStartForCard(card.Name, year, month);
+                    DateTime billingEnd = GetBillingEndForCard(card.Name, year, month);
 
                     decimal amountDue = 0m;
 
-                    // Try to obtain balance on or before billingEnd
-                    var balanceOnOrBefore = GetLastBalanceOnOrBefore(cardTx, billingEnd);
-                    if (balanceOnOrBefore.HasValue)
+                    // Current-month due date (if today is earlier in the same month) — prefer using register balance at cutoff
+                    if (dueDate.Year == today.Year && dueDate.Month == today.Month)
                     {
-                        // Use absolute value of balance as the approximate amount due
-                        amountDue = Math.Abs(balanceOnOrBefore.Value);
+                        var cardTx = ReadCardRegister(card.Name);
+
+                        var balanceOnOrBefore = GetLastBalanceOnOrBefore(cardTx, billingEnd);
+                        if (balanceOnOrBefore.HasValue)
+                        {
+                            amountDue = Math.Max(0m, -balanceOnOrBefore.Value);
+                        }
+                        else
+                        {
+                            DateTime effectiveEnd = billingEnd;
+                            var lastTxDate = cardTx.Any() ? cardTx.Max(t => t.Date) : (DateTime?)null;
+                            if (lastTxDate.HasValue && lastTxDate.Value < billingEnd)
+                                effectiveEnd = lastTxDate.Value;
+
+                            decimal txSum = SumTransactionsBetweenExcludingPayments(cardTx, billingStart, effectiveEnd);
+
+                            var forecastSum = expanded
+                                .Where(f => f.Account.Equals(card.Name, StringComparison.OrdinalIgnoreCase)
+                                            && f.Date >= billingStart && f.Date <= billingEnd)
+                                .Sum(f => f.Amount);
+
+                            amountDue = Math.Abs(txSum + forecastSum);
+                        }
                     }
                     else
                     {
-                        // No balance column or no balance row found — sum transactions between billingStart..billingEnd
-                        DateTime effectiveEnd = billingEnd;
-                        var lastTxDate = cardTx.Any() ? cardTx.Max(t => t.Date) : (DateTime?)null;
-                        if (lastTxDate.HasValue && lastTxDate.Value < billingEnd)
-                            effectiveEnd = lastTxDate.Value;
+                        // FUTURE due dates: use simulated statement amount derived from card balance at cutoff date
+                        if (simulated.TryGetValue(card.Name, out var byDue) && byDue.TryGetValue(dueDate, out var stmt))
+                        {
+                            amountDue = stmt;
+                        }
+                        else
+                        {
+                            // Fallback (should be rare): approximate with forecast sum in the billing window
+                            var forecastSum = expanded
+                                .Where(f => f.Account.Equals(card.Name, StringComparison.OrdinalIgnoreCase)
+                                            && f.Date >= billingStart && f.Date <= billingEnd)
+                                .Sum(f => f.Amount);
 
-                        decimal txSum = SumTransactionsBetweenExcludingPayments(cardTx, billingStart, effectiveEnd);
-
-                        // Include forecasted occurrences (forecastSum) that might not be in card register yet
-                        decimal combined = txSum + forecastSum;
-
-                        // Use absolute combined amount as amount due
-                        amountDue = Math.Abs(combined);
+                            amountDue = Math.Abs(forecastSum);
+                        }
                     }
 
                     if (amountDue > 0m)
