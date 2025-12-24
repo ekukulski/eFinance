@@ -31,13 +31,23 @@ public partial class AverageExpenses : ContentPage
             _viewModel.UpdateSelectedCategoryTotal(selected.Category);
 
             var expenses = _viewModel.AllExpenseRecords
-                .Where(r => string.Equals(r.Category?.Trim(), selected.Category?.Trim(), StringComparison.OrdinalIgnoreCase))
-                .OrderBy(r => DateTime.Parse(r.Date)) // <-- Sort by date ascending
+                .Where(r => string.Equals(
+                    r.Category?.Trim(),
+                    selected.Category?.Trim(),
+                    StringComparison.OrdinalIgnoreCase))
+                .OrderBy(r => DateTime.Parse(r.Date))
                 .ToList();
 
-            await Navigation.PushAsync(new ExpenseRecordPage(selected.Category, expenses));
+            await Shell.Current.GoToAsync(
+                nameof(ExpenseRecordPage),
+                new Dictionary<string, object>
+                {
+                    ["Category"] = selected.Category,
+                    ["Expenses"] = expenses
+                });
         }
     }
+
     private void ExportAverageExpensesToCsv()
     {
         if (_viewModel.CategoryAverages.Count == 0)

@@ -240,7 +240,14 @@ namespace KukiFinance.Pages
                     Amount = d.Amount
                 }).ToList();
 
-                await Navigation.PushAsync(new ExpenseRecordPage(summary.Category, expenseRecords));
+                await Shell.Current.GoToAsync(
+                    nameof(ExpenseRecordPage),
+                    new Dictionary<string, object>
+                    {
+                        ["Category"] = summary.Category,
+                        ["Expenses"] = expenseRecords
+                    });
+
                 ExpenseCollectionView.SelectedItem = null;
             }
         }

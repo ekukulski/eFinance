@@ -25,7 +25,7 @@
                     TextColor="Black" 
                     FontSize="16" 
                     HorizontalOptions="Fill" 
-                    Clicked="FinanceSummaryButton_Clicked" />
+                    Command="{Binding OpenFinanceSummaryCommand}" />
             <Button Grid.Row="3" 
                     Grid.Column="0" 
                     Text="Expense Summary" 
@@ -34,7 +34,7 @@
                     TextColor="Black" 
                     FontSize="16" 
                     HorizontalOptions="Fill" 
-                    Clicked="ExpenseButton_Clicked" />
+                    Command="{Binding OpenExpenseCommand}" />
             <Button Grid.Row="4" 
                     Grid.Column="0" 
                     Text="Average Expense Summary" 
@@ -43,7 +43,7 @@
                     TextColor="Black" 
                     FontSize="16" 
                     HorizontalOptions="Fill" 
-                    Clicked="AverageExpenseButton_Clicked" />
+                    Command="{Binding OpenAverageExpenseCommand}" />
             <Button Grid.Row="5" 
                     Grid.Column="0" 
                     Text="Cash Flow" 
@@ -52,7 +52,7 @@
                     TextColor="Black" 
                     FontSize="16" 
                     HorizontalOptions="Fill" 
-                    Clicked="CashFlowButton_Clicked" />
+                    Command="{Binding OpenCashFlowCommand}" />
             <Button Grid.Row="2" 
                     Grid.Column="0" 
                     Text="Calendar"
@@ -61,7 +61,7 @@
                     TextColor="Black"
                     FontSize="16"
                     HorizontalOptions="Fill"
-                    Clicked="CalendarButton_Clicked" />
+                    Command="{Binding OpenCalendarCommand}" />
             <!-- Add more as needed -->
 
             <!-- Column 1: Assets -->
@@ -71,42 +71,42 @@
                     BackgroundColor="LightBlue"  
                     FontSize="16" TextColor="Black" 
                     HorizontalOptions="Fill" 
-                    Clicked="MidlandButton_Clicked" />
+                    Command="{Binding OpenMidlandCommand}" />
             <Button Grid.Row="2" 
                     Grid.Column="1" 
                     Text="Charles Schwab Contributory" 
                     BackgroundColor="LightBlue" 
                     FontSize="16" TextColor="Black" 
                     HorizontalOptions="Fill" 
-                    Clicked="CharlesSchwabContributoryButton_Clicked" />
+                    Command="{Binding OpenCharlesSchwabContributoryCommand}" />
             <Button Grid.Row="3" 
                     Grid.Column="1" 
                     Text="Charles Schwab Joint Tenant" 
                     BackgroundColor="LightBlue" 
                     FontSize="16" TextColor="Black" 
                     HorizontalOptions="Fill" 
-                    Clicked="CharlesSchwabJointTenantButton_Clicked" />
+                    Command="{Binding OpenCharlesSchwabJointTenantCommand}" />
             <Button Grid.Row="4" 
                     Grid.Column="1" 
                     Text="Charles Schwab Roth IRA Ed" 
                     BackgroundColor="LightBlue" 
                     FontSize="16" TextColor="Black" 
                     HorizontalOptions="Fill" 
-                    Clicked="CharlesSchwabRothIRAEdButton_Clicked" />
+                    Command="{Binding OpenCharlesSchwabRothIRAEdCommand}" />
             <Button Grid.Row="5" 
                     Grid.Column="1" 
                     Text="Charles Schwab Roth IRA Patti" 
                     BackgroundColor="LightBlue" 
                     FontSize="16" TextColor="Black" 
                     HorizontalOptions="Fill" 
-                    Clicked="CharlesSchwabRothIRAPattiButton_Clicked" />
+                    Command="{Binding OpenCharlesSchwabRothIRAPattiCommand}" />
             <Button Grid.Row="6" 
                     Grid.Column="1" 
                     Text="NetX" 
                     BackgroundColor="LightBlue" 
                     FontSize="16" TextColor="Black" 
                     HorizontalOptions="Fill"
-                    Clicked="NetXButton_Clicked" />
+                    Command="{Binding OpenNetXCommand}" />
             <Button Grid.Row="7" 
                     Grid.Column="1" 
                     Text="HealthPro" 
@@ -114,7 +114,7 @@
                     FontSize="16" 
                     TextColor="Black" 
                     HorizontalOptions="Fill" 
-                    Clicked="HealthProButton_Clicked" />
+                    Command="{Binding OpenHealthProCommand}" />
             <Button Grid.Row="8" 
                     Grid.Column="1" 
                     Text="Select 401(K)" 
@@ -122,14 +122,14 @@
                     FontSize="16" 
                     TextColor="Black" 
                     HorizontalOptions="Fill" 
-                    Clicked="Select401KButton_Clicked" />
+                    Command="{Binding OpenSelect401KCommand}" />
             <Button Grid.Row="9" 
                     Grid.Column="1" 
                     Text="Gold" 
                     BackgroundColor="LightBlue" 
                     FontSize="16" TextColor="Black" 
                     HorizontalOptions="Fill"
-                    Clicked="GoldButton_Clicked" />
+                    Command="{Binding OpenGoldCommand}" />
             <Button Grid.Row="10" 
                     Grid.Column="1" 
                     Text="House" 
@@ -137,21 +137,21 @@
                     FontSize="16" 
                     TextColor="Black" 
                     HorizontalOptions="Fill"
-                    Clicked="HouseButton_Clicked" />
+                    Command="{Binding OpenHouseCommand}" />
             <Button Grid.Row="11" 
                     Grid.Column="1" 
                     Text="Cheverolet Impala" 
                     BackgroundColor="LightBlue" 
                     FontSize="16" TextColor="Black" 
                     HorizontalOptions="Fill" 
-                    Clicked="ChevroletImpalaButton_Clicked" />
+                    Command="{Binding OpenChevroletImpalaCommand}" />
             <Button Grid.Row="12" 
                     Grid.Column="1" 
                     Text="Nissan Sentra" 
                     BackgroundColor="LightBlue" 
                     FontSize="16" TextColor="Black" 
                     HorizontalOptions="Fill" 
-                    Clicked="NissanSentraButton_Clicked" />
+                    Command="{Binding OpenNissanSentraCommand}" />
             <!-- Add more as needed -->
 
             <!-- Column 2: Cash -->
@@ -163,7 +163,7 @@
                     TextColor="Black"
                     FontSize="16"
                     HorizontalOptions="Fill"
-                    Clicked="CashButton_Clicked" />
+                    Command="{Binding OpenCashCommand}" />
             <Button Grid.Row="2" 
                     Grid.Column="2" 
                     Text="BMO Check Register"
@@ -172,7 +172,7 @@
                     TextColor="Black"
                     FontSize="16"
                     HorizontalOptions="Fill"
-                    Clicked="BmoCheckRegisterButton_Clicked" />
+                    Command="{Binding OpenBmoCheckRegisterCommand}" />
             <Button Grid.Row="3" 
                     Grid.Column="2" 
                     Text="BMO Money Market Register"
@@ -181,7 +181,7 @@
                     TextColor="Black"
                     FontSize="16"
                     HorizontalOptions="Fill"
-                    Clicked="BmoMoneyMarketRegisterButton_Clicked" />
+                    Command="{Binding OpenBmoMoneyMarketRegisterCommand}" />
             <Button Grid.Row="4" 
                     Grid.Column="2" 
                     Text="BMO CD Register"
@@ -190,7 +190,7 @@
                     TextColor="Black"
                     FontSize="16"
                     HorizontalOptions="Fill"
-                    Clicked="BmoCdRegisterButton_Clicked" />
+                    Command="{Binding OpenBmoCdRegisterCommand}" />
             <Button Grid.Row="13" 
                     Grid.Column="2" 
                     Text="" 
@@ -204,7 +204,7 @@
                     TextColor="Black"
                     FontSize="16"
                     HorizontalOptions="Fill"
-                    Clicked="ExitButton_Clicked" />
+                    Command="{Binding OpenExitCommand}" />
             <!-- Add more as needed -->
 
             <!-- Column 3: Liabilities (placeholders) -->
@@ -216,14 +216,14 @@
                     FontSize="16"
                     TextColor="Black"
                     HorizontalOptions="Fill"
-                    Clicked="AMEXButton_Clicked" />
+                    Command="{Binding OpenAMEXCommand}" />
             <Button Grid.Row="2" 
                     Grid.Column="3" 
                     Text="Visa" 
                     BackgroundColor="Moccasin" 
                     FontSize="16" TextColor="Black" 
                     HorizontalOptions="Fill"
-                    Clicked="VisaButton_Clicked" />
+                    Command="{Binding OpenVisaCommand}" />
             <Button Grid.Row="3" 
                     Grid.Column="3" 
                     Text="MasterCard" 
@@ -231,7 +231,7 @@
                     FontSize="16" 
                     TextColor="Black" 
                     HorizontalOptions="Fill"
-                    Clicked="MasterCardButton_Clicked" />
+                    Command="{Binding OpenMasterCardCommand}" />
             <!-- Add more as needed -->
 
             <!-- Column 4: Tools -->
@@ -242,7 +242,7 @@
                     BackgroundColor="LightGray" 
                     TextColor="Black" FontSize="16" 
                     HorizontalOptions="Fill" 
-                    Clicked="CheckNumberButton_Clicked" />
+                    Command="{Binding OpenCheckNumberCommand}" />
             <Button Grid.Row="2"
                     Grid.Column="4"
                     Text="Category"
@@ -251,7 +251,7 @@
                     TextColor="Black"
                     FontSize="16"
                     HorizontalOptions="Fill"
-                    Clicked="CategoryButton_Clicked" />
+                    Command="{Binding OpenCategoryCommand}" />
             <Button Grid.Row="3" 
                     Grid.Column="4" 
                     Text="Category List"
@@ -260,7 +260,7 @@
                     TextColor="Black"
                     FontSize="16"
                     HorizontalOptions="Fill"                
-                    Clicked="CategoryListButton_Clicked" />
+                    Command="{Binding OpenCategoryListCommand}" />
             <Button Grid.Row="4"
                     Grid.Column="4"
                     Text="Opening Balances"
@@ -269,7 +269,7 @@
                     TextColor="Black"
                     FontSize="16"
                     HorizontalOptions="Fill"
-                    Clicked="OpeningBalancesButton_Clicked" />
+                    Command="{Binding OpenOpeningBalancesCommand}" />
             <Button Grid.Row="5" 
                     Grid.Column="4"
                     Text="Excluded Categories"
@@ -278,7 +278,7 @@
                     TextColor="Black"
                     FontSize="16"
                     HorizontalOptions="Fill"
-                    Clicked="OnExcludedCategoriesClicked"/>
+                    Command="{Binding OpenExcludedCategoriesCommand}" />
             <Button Grid.Row="6" 
                     Grid.Column="4"
                     Text="Forecast Expenses"
@@ -287,7 +287,7 @@
                     TextColor="Black"
                     FontSize="16"
                     HorizontalOptions="Fill"
-                    Clicked="ForecastExpensesButton_Clicked"/>
+                    Command="{Binding OpenForecastExpensesCommand}" />
             <!-- Add more as needed -->
             
         </Grid>

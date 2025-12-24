@@ -1,6 +1,8 @@
 using CsvHelper.Configuration;
 using KukiFinance.Models;
 
+namespace KukiFinance.Helpers;
+
 public sealed class RegistryEntryMap : ClassMap<RegistryEntry>
 {
     public RegistryEntryMap()
@@ -27,17 +29,16 @@ public sealed class RegistryEntryMap : ClassMap<RegistryEntry>
 
         // Visa-specific
         Map(m => m.Category).Name("Category");
-        Map(m => m.Type).Name("Type");
-       
-        Map(m => m.Memo).Name("Memo");
+        Map(m => m.CheckNumber).Name("Check Number");
+        Map(m => m.TransactionReferenceNumber).Name("Transaction Reference Number");
 
-        // Common/Other
-        Map(m => m.Currency).Name("CURRENCY");
-        Map(m => m.CheckNumber).Name("TRANSACTION REFERENCE NUMBER");
-        Map(m => m.FiTransactionReference).Name("FI TRANSACTION REFERENCE");
-        Map(m => m.OriginalAmount).Name("ORIGINAL AMOUNT");
-        Map(m => m.CreditOrDebit).Name("CREDIT/DEBIT");
-        Map(m => m.Account).Name("ACCOUNT");
-        Map(m => m.Type).Name("TYPE");
+        // Schwab / generic CSV fields
+        Map(m => m.Type).Name("Type");
+        Map(m => m.Memo).Name("Memo");
+        Map(m => m.Currency).Name("Currency");
+        Map(m => m.FiTransactionReference).Name("Fi Transaction Reference");
+        Map(m => m.OriginalAmount).Name("Original Amount");
+        Map(m => m.CreditOrDebit).Name("Credit/Debit");
+        Map(m => m.Account).Name("Account");
     }
 }
