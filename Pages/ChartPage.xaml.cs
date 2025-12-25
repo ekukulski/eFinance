@@ -21,8 +21,7 @@ namespace KukiFinance.Pages
             InitializeComponent();
 
             // Keep your window sizing behavior
-            WindowCenteringService.CenterWindow(2750, 600);
-
+            
             TitleLabel.Text = $"{account} - {year} Weekly Balance";
 
             // Start at first Saturday of selected year

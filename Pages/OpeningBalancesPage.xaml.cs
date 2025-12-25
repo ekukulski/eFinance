@@ -16,8 +16,7 @@ namespace KukiFinance.Pages
         public OpeningBalancesPage()
         {
             InitializeComponent();
-            WindowCenteringService.CenterWindow(630, 625);
-
+            
             LoadBalances();
             BalancesCollectionView.ItemsSource = Balances;
         }

@@ -26,7 +26,6 @@ namespace KukiFinance.Pages
         public BmoCheckRegisterPage()
         {
             InitializeComponent();
-            WindowCenteringService.CenterWindow(1435, 1375);
             BindingContext = viewModel;
             LoadRegister();
         }

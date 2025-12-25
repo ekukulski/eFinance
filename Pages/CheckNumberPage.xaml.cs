@@ -31,7 +31,6 @@ namespace KukiFinance.Pages
         public CheckNumberPage()
         {
             InitializeComponent();
-            WindowCenteringService.CenterWindow(920, 1400);
             BindingContext = this;
             LoadCheckNumbers();
         }

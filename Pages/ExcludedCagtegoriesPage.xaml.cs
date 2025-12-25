@@ -17,7 +17,6 @@ public partial class ExcludedCategoriesPage : ContentPage
     public ExcludedCategoriesPage()
     {
         InitializeComponent();
-        WindowCenteringService.CenterWindow(440, 1200);
         BindingContext = this;
         LoadExcludedCategories();
     }

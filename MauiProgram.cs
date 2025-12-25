@@ -1,31 +1,55 @@
 ﻿using KukiFinance.Services;
-using LiveChartsCore.SkiaSharpView.Maui;
-using Microsoft.Extensions.Logging;
-using SkiaSharp.Views.Maui.Controls.Hosting;
 using KukiFinance.ViewModels;
+using LiveChartsCore.SkiaSharpView.Maui;
+using Microsoft.Extensions.DependencyInjection; // <- important for GetService
+using Microsoft.Extensions.Logging;
+using Microsoft.Maui.LifecycleEvents;
+using SkiaSharp.Views.Maui.Controls.Hosting;
 
-namespace KukiFinance
+namespace KukiFinance;
+
+public static class MauiProgram
 {
-    public static class MauiProgram
+    public static MauiApp CreateMauiApp()
     {
-        public static MauiApp CreateMauiApp()
-        {
-            var builder = MauiApp.CreateBuilder();
-            builder
-                .UseMauiApp<App>()
-                .UseSkiaSharp()
-                .UseLiveCharts();
+        var builder = MauiApp.CreateBuilder();
+        builder
+            .UseMauiApp<App>()
+            .UseSkiaSharp()
+            .UseLiveCharts();
 
-            builder.Services.AddSingleton<INavigationService, NavigationService>();
-            builder.Services.AddTransient<MainPageViewModel>();
-            builder.Services.AddTransient<MainPage>();
-
+        builder.Services.AddSingleton<INavigationService, NavigationService>();
+        builder.Services.AddTransient<MainPageViewModel>();
+        builder.Services.AddTransient<MainPage>();
+        builder.Services.AddSingleton<AppShell>();
+        builder.Services.AddSingleton<IWindowSizingService, WindowSizingService>();
+        builder.Services.AddSingleton<ICsvFileService, CsvFileService>();
 
 #if DEBUG
-            builder.Logging.AddDebug();
+        builder.Logging.AddDebug();
 #endif
 
-            return builder.Build();
-        }
+        // 👇 Capture the built MauiApp so we can use app.Services later
+        MauiApp? app = null;
+
+        builder.ConfigureLifecycleEvents(events =>
+        {
+#if WINDOWS
+            events.AddWindows(w =>
+            {
+                w.OnWindowCreated(window =>
+                {
+                    var sizer = app?.Services.GetService<IWindowSizingService>();
+                    if (sizer is null)
+                        return;
+
+                    window.DispatcherQueue.TryEnqueue(() => sizer.ApplyDefaultSizing());
+                });
+            });
+#endif
+        });
+
+        app = builder.Build();
+        return app;
     }
 }

@@ -20,7 +20,6 @@ public partial class AverageExpenses : ContentPage
     protected override void OnAppearing()
     {
         base.OnAppearing();
-        WindowCenteringService.CenterWindow(515, 1400);
         ExportAverageExpensesToCsv();
     }
 

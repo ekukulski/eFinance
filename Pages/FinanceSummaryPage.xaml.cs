@@ -49,7 +49,6 @@ namespace KukiFinance.Pages
         public FinanceSummaryPage()
         {
             InitializeComponent();
-            WindowCenteringService.CenterWindow(1350, 1100);
             try
             {
                 BuildSummaryTable();

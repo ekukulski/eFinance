@@ -112,13 +112,7 @@ namespace KukiFinance.Pages
 
             SafeShowMonth();
         }
-
-        protected override void OnAppearing()
-        {
-            base.OnAppearing();
-            WindowCenteringService.CenterWindow(2500, 1200); // <-- pick your preferred Calendar size
-        }
-
+        
         // Wrap ShowMonth to prevent hard-crash on unexpected exceptions
         private void SafeShowMonth()
         {

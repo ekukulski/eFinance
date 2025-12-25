@@ -29,7 +29,6 @@ namespace KukiFinance.Pages
         protected override void OnAppearing()
         {
             base.OnAppearing();
-            WindowCenteringService.CenterWindow(1800, 1400);
             LoadForecastExpenses();
         }
 

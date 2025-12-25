@@ -26,7 +26,6 @@ namespace KukiFinance.Pages
         public VisaRegisterPage()
         {
             InitializeComponent();
-            WindowCenteringService.CenterWindow(1435, 1375);
             BindingContext = viewModel;
             LoadRegister();
         }

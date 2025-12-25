@@ -204,7 +204,7 @@
                     TextColor="Black"
                     FontSize="16"
                     HorizontalOptions="Fill"
-                    Command="{Binding OpenExitCommand}" />
+                    Command="{Binding ExitCommand}" />
             <!-- Add more as needed -->
 
             <!-- Column 3: Liabilities (placeholders) -->

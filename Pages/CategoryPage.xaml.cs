@@ -31,7 +31,6 @@ namespace KukiFinance.Pages
         public CategoryPage()
         {
             InitializeComponent();
-            WindowCenteringService.CenterWindow(870, 1400);
             LoadEntries();
             BindingContext = this;
         }

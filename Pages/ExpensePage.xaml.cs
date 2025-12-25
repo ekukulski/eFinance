@@ -57,15 +57,8 @@ namespace KukiFinance.Pages
         public ExpensePage()
         {
             InitializeComponent();
-            WindowCenteringService.CenterWindow(515, 1400);
             LoadAllExpenses();
             PopulatePickers();
-        }
-
-        protected override void OnAppearing()
-        {
-            base.OnAppearing();
-            WindowCenteringService.CenterWindow(515, 1400);
         }
 
         private static HashSet<string> GetExcludedCategoriesFromCsv()

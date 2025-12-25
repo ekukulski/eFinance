@@ -22,7 +22,6 @@ namespace KukiFinance.Pages
         public CharlesSchwabRothIraPattiRegisterPage()
         {
             InitializeComponent();
-            WindowCenteringService.CenterWindow(1435, 1375);
             BindingContext = viewModel;
             LoadRegister();
         }
@@ -65,6 +64,7 @@ namespace KukiFinance.Pages
                 },
                 entry => entry.Date ?? DateTime.MinValue,
                 entry => entry.Amount ?? 0,
+                entry => entry.Balance,
                 (entry, balance) => entry.Balance = balance,
                 new RegistryEntry
                 {

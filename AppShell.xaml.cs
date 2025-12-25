@@ -1,13 +1,19 @@
 ﻿using KukiFinance.Pages;
+using KukiFinance.Services;
 
 namespace KukiFinance;
 
 public partial class AppShell : Shell
 {
-    public AppShell()
+    private readonly IWindowSizingService _windowSizer;
+
+    // 👇 CHANGE: inject IWindowSizingService
+    public AppShell(IWindowSizingService windowSizer)
     {
         InitializeComponent();
+        _windowSizer = windowSizer;
 
+        // ✅ KEEP ALL YOUR ROUTES — unchanged
         Routing.RegisterRoute(nameof(BmoCheckRegisterPage), typeof(BmoCheckRegisterPage));
         Routing.RegisterRoute(nameof(CheckNumberPage), typeof(CheckNumberPage));
         Routing.RegisterRoute(nameof(CategoryListPage), typeof(CategoryListPage));
@@ -40,5 +46,13 @@ public partial class AppShell : Shell
         Routing.RegisterRoute(nameof(ForecastExpensesPage), typeof(ForecastExpensesPage));
         Routing.RegisterRoute(nameof(EditForecastExpensePage), typeof(EditForecastExpensePage));
         Routing.RegisterRoute(nameof(ExpenseRecordPage), typeof(ExpenseRecordPage));
+
+        // ✅ APPLY WINDOW SIZING AFTER EVERY NAVIGATION
+        Navigated += (_, __) =>
+        {
+#if WINDOWS
+            Dispatcher.Dispatch(() => _windowSizer.ApplyDefaultSizing());
+#endif
+        };
     }
 }

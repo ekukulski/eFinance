@@ -23,7 +23,6 @@ namespace KukiFinance.Pages
         public MidlandRegisterPage()
         {
             InitializeComponent();
-            WindowCenteringService.CenterWindow(1435, 1375);
             BindingContext = viewModel;
             LoadRegister();
         }
@@ -65,6 +64,7 @@ namespace KukiFinance.Pages
                     Amount = decimal.TryParse(parts[2].Trim(), out var amt) ? amt : 0
                 },
                 entry => entry.Date ?? DateTime.MinValue,
+                entry => entry.Balance,
                 entry => entry.Amount ?? 0,
                 (entry, balance) => entry.Balance = balance,
                 new RegistryEntry

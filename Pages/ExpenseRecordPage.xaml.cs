@@ -35,7 +35,6 @@ public partial class ExpenseRecordPage : ContentPage, IQueryAttributable
     protected override void OnAppearing()
     {
         base.OnAppearing();
-        WindowCenteringService.CenterWindow(1000, 1400);
     }
 
     private async void ReturnButton_Clicked(object sender, EventArgs e)
