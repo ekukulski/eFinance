@@ -1,8 +1,10 @@
 {
-  "profiles": {
-    "Windows Machine": {
-      "commandName": "Project",
-      "nativeDebugging": false
+    "profiles": {
+        "KukiFinance": {
+            "commandName": "Project"
+        },
+        "KukiFinance (MSIX)": {
+            "commandName": "MsixPackage"
+        }
     }
-  }
 }

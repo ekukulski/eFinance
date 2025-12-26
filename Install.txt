@@ -1,0 +1,105 @@
+KukiFinance Application Installation Guide (.msix)
+
+========================================
+1. System Requirements
+----------------------------------------
+- Windows 10 version 17763 (1809) or later
+- Windows 11 supported
+- .NET 9 Desktop Runtime (if not already installed)
+- Sufficient disk space for application and data files
+- OneDrive (optional, if used for backup or data transfer)
+
+========================================
+2. Files Provided
+----------------------------------------
+- KukiFinance.msix              (Windows installer package)
+- KukiFinance_MSIX.cer or KukiFinance_MSIX.pfx
+                                (Code signing certificate, if self-signed)
+- Install.txt                   (This guide)
+
+========================================
+3. Certificate Installation (if self-signed)
+----------------------------------------
+If you receive a warning about an untrusted publisher during installation,
+you must install the provided certificate before installing the app.
+
+a. Double-click KukiFinance_MSIX.cer
+   (If only a .pfx file is provided, export the .cer from it or use PowerShell.)
+
+b. Click "Install Certificate".
+
+c. Choose one of the following:
+   - "Current User" (recommended, no admin required)
+   - "Local Machine" (requires administrator privileges)
+
+d. Select "Place all certificates in the following store".
+
+e. Click "Browse" and choose "Trusted People".
+
+f. Complete the wizard and accept any security prompts.
+
+You should see a confirmation message indicating the certificate
+was imported successfully.
+
+========================================
+4. Application Installation
+----------------------------------------
+a. Double-click KukiFinance.msix to start the installer.
+b. If prompted, confirm that you want to install the application.
+c. Follow the on-screen instructions to complete installation.
+
+Once installed, KukiFinance will appear in the Windows Start Menu.
+
+========================================
+5. First Run
+----------------------------------------
+- Launch KukiFinance from the Start Menu.
+- On first run, the application will initialize its local data storage.
+- No additional configuration is required.
+
+========================================
+6. Updating the Application
+----------------------------------------
+- To update KukiFinance, install a newer version of KukiFinance.msix.
+- MSIX will automatically upgrade the existing installation.
+- User data and settings are preserved during updates.
+
+========================================
+7. Uninstalling
+----------------------------------------
+a. Open Windows Settings.
+b. Navigate to Apps > Installed Apps.
+c. Locate "KukiFinance".
+d. Click "Uninstall" and confirm.
+
+Alternatively, right-click KukiFinance in the Start Menu
+and select "Uninstall".
+
+========================================
+8. Troubleshooting
+----------------------------------------
+- Untrusted publisher warning:
+  Ensure the certificate is installed in the "Trusted People" store.
+
+- App fails to install:
+  Verify your Windows version meets the minimum requirements.
+
+- App fails to launch:
+  Ensure Windows and .NET 9 Desktop Runtime are up to date,
+  then restart the computer and try again.
+
+========================================
+9. Support
+----------------------------------------
+- For support or questions, contact:
+  Edward Kukulski
+
+========================================
+10. Notes
+----------------------------------------
+- This application is intended for personal use.
+- Data is stored within the user's Windows profile.
+- The application can be safely removed at any time via Windows Settings.
+
+========================================
+END OF FILE
