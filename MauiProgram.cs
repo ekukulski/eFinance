@@ -21,9 +21,11 @@ public static class MauiProgram
         builder.Services.AddSingleton<INavigationService, NavigationService>();
         builder.Services.AddTransient<MainPageViewModel>();
         builder.Services.AddTransient<MainPage>();
+        builder.Services.AddTransient<KukiFinance.Pages.DataSyncPage>();
         builder.Services.AddSingleton<AppShell>();
         builder.Services.AddSingleton<IWindowSizingService, WindowSizingService>();
         builder.Services.AddSingleton<ICsvFileService, CsvFileService>();
+        builder.Services.AddSingleton<IOneDriveSyncService, OneDriveSyncService>();
 
 #if DEBUG
         builder.Logging.AddDebug();

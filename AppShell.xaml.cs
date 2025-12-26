@@ -46,6 +46,7 @@ public partial class AppShell : Shell
         Routing.RegisterRoute(nameof(ForecastExpensesPage), typeof(ForecastExpensesPage));
         Routing.RegisterRoute(nameof(EditForecastExpensePage), typeof(EditForecastExpensePage));
         Routing.RegisterRoute(nameof(ExpenseRecordPage), typeof(ExpenseRecordPage));
+        Routing.RegisterRoute(nameof(DataSyncPage), typeof(DataSyncPage));
 
         // ✅ APPLY WINDOW SIZING AFTER EVERY NAVIGATION
         Navigated += (_, __) =>

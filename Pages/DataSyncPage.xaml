@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="KukiFinance.Pages.DataSyncPage"
+             Title="OneDrive Import/Export">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="16">
+            <Label Text="OneDrive Sync"
+                   FontSize="22"
+                   FontAttributes="Bold" />
+
+            <Label Text="Your working CSV files live in LocalState. Use these buttons to export a snapshot to OneDrive or import the latest snapshot from OneDrive."
+                   FontSize="14" />
+
+            
+<Frame Padding="12">
+    <VerticalStackLayout Spacing="10">
+        <Label Text="Automation"
+               FontAttributes="Bold"
+               FontSize="16" />
+        <HorizontalStackLayout Spacing="12" VerticalOptions="Center">
+            <Switch x:Name="AutoImportSwitch"
+                    Toggled="OnAutoImportToggled" />
+            <Label Text="Auto-import on startup (prompt if a newer snapshot is available)" VerticalOptions="Center"/>
+        </HorizontalStackLayout>
+        <HorizontalStackLayout Spacing="12" VerticalOptions="Center">
+            <Switch x:Name="AutoExportSwitch"
+                    Toggled="OnAutoExportToggled" />
+            <Label Text="Auto-export on exit (best-effort)" VerticalOptions="Center"/>
+        </HorizontalStackLayout>
+    </VerticalStackLayout>
+</Frame>
+
+            <Button Text="Export DB to OneDrive"
+                    Clicked="OnExportClicked" />
+
+            <Button Text="Import Latest DB from OneDrive"
+                    Clicked="OnImportClicked" />
+
+            <Label x:Name="StatusLabel"
+                   Text=""
+                   FontSize="14" />
+
+            <Button Text="Return"
+                    Clicked="OnReturnClicked" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

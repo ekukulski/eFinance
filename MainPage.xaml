@@ -120,6 +120,10 @@
             <Button Grid.Row="6" Grid.Column="4" Text="Forecast Expenses" BackgroundColor="LightGray"
                     TextColor="Black" FontSize="16" HorizontalOptions="Fill"
                     Command="{Binding OpenForecastExpensesCommand}" />
+                    <Button Grid.Row="7" Grid.Column="4" Text="Data Sync" BackgroundColor="LightGray"
+                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
+                    Command="{Binding OpenDataSyncCommand}" />
+
         </Grid>
     </VerticalStackLayout>
 </ContentPage>

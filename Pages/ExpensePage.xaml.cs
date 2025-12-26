@@ -208,7 +208,7 @@ namespace KukiFinance.Pages
                     Category = g.Key,
                     Total = g.Sum(x => x.Amount ?? 0m)
                 })
-                .OrderByDescending(x => x.Total)
+                .OrderBy(x => x.Category, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
             // Totals

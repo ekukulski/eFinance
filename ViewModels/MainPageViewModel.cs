@@ -47,6 +47,8 @@ public partial class MainPageViewModel : ObservableObject
     [RelayCommand] private Task OpenExcludedCategories() => _nav.GoToAsync(nameof(ExcludedCategoriesPage));
     [RelayCommand] private Task OpenForecastExpenses() => _nav.GoToAsync(nameof(ForecastExpensesPage));
 
+    [RelayCommand] private Task OpenDataSync() => _nav.GoToAsync(nameof(DataSyncPage));
+
     [RelayCommand]
     private void Exit()
     {
