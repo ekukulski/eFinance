@@ -91,7 +91,7 @@ namespace KukiFinance.Pages
 
                     using var reader = new StreamReader(filePath);
                     using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
-                    csv.Context.RegisterClassMap<RegistryEntryMap>();
+                    csv.Context.RegisterClassMap<CurrentRegisterEntryMap>();
 
                     var records = csv.GetRecords<RegistryEntry>();
 
