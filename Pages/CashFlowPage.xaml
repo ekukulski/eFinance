@@ -10,7 +10,8 @@
         <viewmodels:CashFlowViewModel />
     </ContentPage.BindingContext>
 
-    <Grid RowDefinitions="Auto,*" Padding="10">
+    <!-- Add a 3rd row for the Return button -->
+    <Grid RowDefinitions="Auto,*,Auto" Padding="10">
 
         <!-- ================= ERROR MESSAGE ================= -->
         <Frame
@@ -80,13 +81,11 @@
 
                 <VerticalStackLayout Spacing="15">
 
-                    <!-- Selected Month -->
                     <Label
                         Text="{Binding SelectedProjection.Month, StringFormat='Details for {0}'}"
                         FontSize="18"
                         FontAttributes="Bold" />
 
-                    <!-- Income -->
                     <Label Text="Income" FontAttributes="Bold" />
 
                     <CollectionView ItemsSource="{Binding SelectedMonthIncome}">
@@ -103,7 +102,6 @@
                         </CollectionView.ItemTemplate>
                     </CollectionView>
 
-                    <!-- Expenses -->
                     <Label Text="Expenses" FontAttributes="Bold" />
 
                     <CollectionView ItemsSource="{Binding SelectedMonthExpenses}">
@@ -124,5 +122,17 @@
             </ScrollView>
 
         </Grid>
+
+        <!-- ================= RETURN BUTTON (NEW) ================= -->
+        <Button
+            Grid.Row="2"
+            Text="Return"
+            WidthRequest="140"
+            HorizontalOptions="Center"
+            Margin="0,12,0,0"
+            TextColor="Black"
+            BackgroundColor="IndianRed"
+            Clicked="ReturnButton_Clicked" />
+
     </Grid>
 </ContentPage>
