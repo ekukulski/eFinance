@@ -3,9 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using Microsoft.Maui.Controls;
 using CsvHelper;
-using CsvHelper.Configuration;
+using Microsoft.Maui.Controls;
 using KukiFinance.Helpers;
 using KukiFinance.Models;
 
@@ -36,7 +35,7 @@ namespace KukiFinance.Pages
             "MasterCardCurrent.csv"
         };
 
-        private List<RegistryEntry> _allExpenses = new();
+        private readonly List<RegistryEntry> _allExpenses = new();
 
         public ExpensePage()
         {
@@ -45,17 +44,13 @@ namespace KukiFinance.Pages
             PopulatePickers();
         }
 
-        private IEnumerable<string> GetCsvFilePaths()
-        {
-            return CsvFiles.Select(FilePathHelper.GetKukiFinancePath);
-        }
+        private static IEnumerable<string> GetCsvFilePaths()
+            => CsvFiles.Select(FilePathHelper.GetKukiFinancePath);
 
-        private string GetExcludedCategoriesPath()
-        {
-            return FilePathHelper.GetKukiFinancePath("ExcludedCategories.csv");
-        }
+        private static string GetExcludedCategoriesPath()
+            => FilePathHelper.GetKukiFinancePath("ExcludedCategories.csv");
 
-        private HashSet<string> GetExcludedCategoriesFromCsv()
+        private static HashSet<string> GetExcludedCategoriesFromCsv()
         {
             var path = GetExcludedCategoriesPath();
             var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -80,7 +75,7 @@ namespace KukiFinance.Pages
                 _allExpenses.Clear();
                 int filesLoaded = 0;
 
-                var excludedCategories = GetExcludedCategoriesFromCsv();
+                var excluded = GetExcludedCategoriesFromCsv();
 
                 foreach (var filePath in GetCsvFilePaths())
                 {
@@ -91,13 +86,13 @@ namespace KukiFinance.Pages
 
                     using var reader = new StreamReader(filePath);
                     using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
+
+                    // Current*.csv format: DATE, DESCRIPTION, CATEGORY, AMOUNT, BALANCE
                     csv.Context.RegisterClassMap<CurrentRegisterEntryMap>();
 
-                    var records = csv.GetRecords<RegistryEntry>();
-
-                    foreach (var record in records)
+                    foreach (var record in csv.GetRecords<RegistryEntry>())
                     {
-                        if (excludedCategories.Contains(record.Category ?? ""))
+                        if (excluded.Contains(record.Category ?? ""))
                             continue;
 
                         _allExpenses.Add(record);
@@ -120,25 +115,139 @@ namespace KukiFinance.Pages
                 await DisplayAlert("Error", $"Failed to load expenses: {ex.Message}", "OK");
             }
         }
-        private void OnShowExpensesClicked(object sender, EventArgs e)
-        {
-            // This button is meant to (re)apply the picker filters to the already-loaded expense list
-            // and refresh the UI.
-            RefreshExpenseSummary();
-        }
-        private void OnCategorySelected(object sender, EventArgs e)
-        {
-            RefreshExpenseSummary();
-        }
 
         private void PopulatePickers()
         {
-            // ← KEEP your original picker logic here (unchanged)
+            // Build years from data
+            var years = _allExpenses
+                .Where(e => e.Date.HasValue)
+                .Select(e => e.Date!.Value.Year)
+                .Distinct()
+                .OrderByDescending(y => y)
+                .ToList();
+
+            YearPicker.Items.Clear();
+            YearPicker.Items.Add("All");
+            foreach (var y in years)
+                YearPicker.Items.Add(y.ToString(CultureInfo.InvariantCulture));
+            YearPicker.SelectedIndex = 0;
+
+            // Quarters
+            QuarterPicker.Items.Clear();
+            QuarterPicker.Items.Add("All");
+            QuarterPicker.Items.Add("Q1");
+            QuarterPicker.Items.Add("Q2");
+            QuarterPicker.Items.Add("Q3");
+            QuarterPicker.Items.Add("Q4");
+            QuarterPicker.SelectedIndex = 0;
+
+            // Months
+            MonthPicker.Items.Clear();
+            MonthPicker.Items.Add("All");
+            for (int m = 1; m <= 12; m++)
+                MonthPicker.Items.Add(CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(m));
+            MonthPicker.SelectedIndex = 0;
         }
 
         private void RefreshExpenseSummary()
         {
-            // ← KEEP your original summary logic here (unchanged)
+            IEnumerable<RegistryEntry> query = _allExpenses;
+
+            // Year filter
+            var yearText = YearPicker.SelectedItem?.ToString();
+            if (!string.IsNullOrWhiteSpace(yearText) && !yearText.Equals("All", StringComparison.OrdinalIgnoreCase))
+            {
+                if (int.TryParse(yearText, out var year))
+                    query = query.Where(e => e.Date.HasValue && e.Date.Value.Year == year);
+            }
+
+            // Quarter filter
+            var quarterText = QuarterPicker.SelectedItem?.ToString();
+            if (!string.IsNullOrWhiteSpace(quarterText) && quarterText.StartsWith("Q", StringComparison.OrdinalIgnoreCase))
+            {
+                int q = quarterText switch
+                {
+                    "Q1" => 1,
+                    "Q2" => 2,
+                    "Q3" => 3,
+                    "Q4" => 4,
+                    _ => 0
+                };
+
+                if (q != 0)
+                {
+                    int startMonth = (q - 1) * 3 + 1; // 1,4,7,10
+                    int endMonth = startMonth + 2;
+
+                    query = query.Where(e =>
+                        e.Date.HasValue &&
+                        e.Date.Value.Month >= startMonth &&
+                        e.Date.Value.Month <= endMonth);
+                }
+            }
+
+            // Month filter (applies on top of year/quarter)
+            var monthText = MonthPicker.SelectedItem?.ToString();
+            if (!string.IsNullOrWhiteSpace(monthText) && !monthText.Equals("All", StringComparison.OrdinalIgnoreCase))
+            {
+                var monthNumber = Enumerable.Range(1, 12)
+                    .FirstOrDefault(m => CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(m)
+                        .Equals(monthText, StringComparison.OrdinalIgnoreCase));
+
+                if (monthNumber != 0)
+                {
+                    query = query.Where(e => e.Date.HasValue && e.Date.Value.Month == monthNumber);
+                }
+            }
+
+            // Summaries by category
+            var summaries = query
+                .GroupBy(e => string.IsNullOrWhiteSpace(e.Category) ? "(Uncategorized)" : e.Category.Trim())
+                .Select(g => new ExpenseCategorySummary
+                {
+                    Category = g.Key,
+                    Total = g.Sum(x => x.Amount ?? 0m)
+                })
+                .OrderByDescending(x => x.Total)
+                .ToList();
+
+            // Totals
+            var expenseTotal = summaries.Sum(s => s.Total);
+
+            // Daily spend: based on distinct transaction dates (simple + stable)
+            var days = query
+                .Where(e => e.Date.HasValue)
+                .Select(e => e.Date!.Value.Date)
+                .Distinct()
+                .Count();
+
+            var dailySpend = days > 0 ? expenseTotal / days : 0m;
+
+            ExpenseTotalLabel.Text = expenseTotal.ToString("C2");
+            DailySpendLabel.Text = dailySpend.ToString("C2");
+
+            ExpenseCollectionView.ItemsSource = summaries;
+            ExpenseCollectionView.SelectedItem = null;
+        }
+
+        // XAML: Button Clicked="OnShowExpensesClicked"
+        private void OnShowExpensesClicked(object sender, EventArgs e)
+        {
+            RefreshExpenseSummary();
+        }
+
+        // XAML: SelectionChanged="OnCategorySelected"
+        private void OnCategorySelected(object sender, SelectionChangedEventArgs e)
+        {
+            // You can add “drill-down” later if you want.
+            // For now, just clear selection so clicking again works.
+            ExpenseCollectionView.SelectedItem = null;
+        }
+
+        private class ExpenseCategorySummary
+        {
+            public string Category { get; set; } = "";
+            public decimal Total { get; set; }
         }
 
         private async void ReturnButton_Clicked(object sender, EventArgs e)
