@@ -5,15 +5,21 @@ using System.Linq;
 namespace KukiFinance.Helpers;
 
 /// <summary>
-/// Locates the user's OneDrive folder on Windows and builds:
-///   OneDrive\Documents\AppData\KukiFinance
+/// Locates the user's OneDrive folder on Windows and builds a KukiFinance OneDrive directory.
+///
+/// IMPORTANT:
+/// - This is intended for explicit export/import only.
+/// - Live app data should remain in FileSystem.AppDataDirectory (LocalState).
+///
+/// Default OneDrive export/import folder:
+///   <OneDriveRoot>\Documents\AppData\KukiFinance
 /// </summary>
 public static class OneDrivePathHelper
 {
     public static string GetOneDriveKukiFinanceDirectory(bool createIfMissing = true)
     {
 #if WINDOWS
-        var root = TryGetOneDriveRoot() 
+        var root = TryGetOneDriveRoot()
             ?? throw new InvalidOperationException(
                 "OneDrive folder not found on this PC. " +
                 "Make sure OneDrive is installed and signed in, then try again.");

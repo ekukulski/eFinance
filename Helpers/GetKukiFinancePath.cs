@@ -1,23 +1,25 @@
 using System;
 using System.IO;
 using System.Linq;
-
-#if WINDOWS
-using System.Security.AccessControl;
-using System.Security.Principal;
-#endif
+using Microsoft.Maui.Storage;
 
 namespace KukiFinance.Helpers;
 
 /// <summary>
 /// Centralized data-path logic for KukiFinance "database" files (CSV, etc.).
 ///
-/// Updated Goal:
-/// - On Windows: use OneDrive as the primary live datastore so data automatically syncs across PCs.
-///   Path: OneDrive\Documents\AppData\KukiFinance
-/// - If OneDrive is unavailable, fall back to a shared local folder (ProgramData\KukiFinance) so
-///   multiple Windows user accounts on the same PC can use the same local data.
-/// - On other platforms: fall back to per-user app data.
+/// Goal (MAUI-correct):
+/// - All live data stays in the app's per-user sandbox (FileSystem.AppDataDirectory).
+///   On Windows this maps under:
+///     C:\Users\<User>\AppData\Local\Packages\<AppId>\LocalState
+/// - OneDrive is used ONLY for explicit export/import actions (not as the live datastore).
+///
+/// Notes:
+/// - To preserve existing users' data, a one-time migration runs if the new folder is empty.
+///   It copies (non-overwriting) files from older locations:
+///     1) OneDrive\Documents\AppData\KukiFinance (if present)
+///     2) C:\ProgramData\KukiFinance
+///     3) C:\Users\<User>\AppData\Local\KukiFinance
 /// </summary>
 public static class FilePathHelper
 {
@@ -25,42 +27,16 @@ public static class FilePathHelper
 
     /// <summary>
     /// Returns the base directory for KukiFinance data files and ensures it exists.
-    /// On Windows, prefers OneDrive for automatic sync across PCs.
+    /// This is always a per-user, app-sandboxed directory.
     /// </summary>
     public static string GetKukiFinanceDirectory()
     {
-#if WINDOWS
-        // 1) Preferred: OneDrive (automatic sync across PCs)
-        //    OneDrive\Documents\AppData\KukiFinance
-        try
-        {
-            var oneDriveDir = OneDrivePathHelper.GetOneDriveKukiFinanceDirectory(createIfMissing: true);
-
-            // One-time migration: if OneDrive folder is empty, copy from local stores.
-            TryMigrateLocalDataToOneDrive(oneDriveDir);
-
-            return oneDriveDir;
-        }
-        catch
-        {
-            // If OneDrive isn't available (not installed/signed-in), fall back to shared local data.
-        }
-
-        // 2) Fallback: shared across all Windows users:
-        //    C:\ProgramData\KukiFinance
-        var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-        var kukiDir = Path.Combine(baseDir, AppFolderName);
-
-        EnsureDirectoryExistsWithUserWriteAccess(kukiDir);
-        return kukiDir;
-#else
-        // Per-user on non-Windows platforms
-        var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var kukiDir = Path.Combine(baseDir, AppFolderName);
-
+        var kukiDir = Path.Combine(FileSystem.AppDataDirectory, AppFolderName);
         Directory.CreateDirectory(kukiDir);
+
+        TryMigrateLegacyDataIntoLocalState(kukiDir);
+
         return kukiDir;
-#endif
     }
 
     /// <summary>
@@ -74,105 +50,81 @@ public static class FilePathHelper
         return Path.Combine(GetKukiFinanceDirectory(), fileName);
     }
 
-#if WINDOWS
     /// <summary>
-    /// One-time migration into OneDrive if OneDrive folder is empty.
-    /// Sources checked (in order):
-    /// 1) ProgramData\KukiFinance (shared local)
-    /// 2) LocalAppData\KukiFinance (older per-user location)
+    /// If the new LocalState folder has no files yet, copy legacy files into it (non-overwriting).
     /// </summary>
-    private static void TryMigrateLocalDataToOneDrive(string oneDriveDir)
+    private static void TryMigrateLegacyDataIntoLocalState(string localStateDir)
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(oneDriveDir) || !Directory.Exists(oneDriveDir))
+            if (string.IsNullOrWhiteSpace(localStateDir) || !Directory.Exists(localStateDir))
                 return;
 
-            // Only migrate if OneDrive folder has no files yet (prevents overwriting synced data)
-            bool oneDriveHasAnyFiles =
-                Directory.EnumerateFiles(oneDriveDir, "*", SearchOption.TopDirectoryOnly).Any();
+            bool localStateHasAnyFiles =
+                Directory.EnumerateFiles(localStateDir, "*", SearchOption.TopDirectoryOnly).Any();
 
-            if (oneDriveHasAnyFiles)
+            // Only migrate into a brand-new/empty store to avoid overwriting user's current data.
+            if (localStateHasAnyFiles)
                 return;
 
-            var sources = new[]
-            {
-                // Shared local store (from earlier approach)
-                Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-                    AppFolderName),
+            var sources = new System.Collections.Generic.List<string>();
 
-                // Old per-user store (original app behavior)
-                Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    AppFolderName)
-            };
-
-            foreach (var src in sources)
+#if WINDOWS
+            // Legacy OneDrive location used by older versions (if it exists)
+            try
             {
-                if (!Directory.Exists(src))
+                var oneDriveDir = OneDrivePathHelper.GetOneDriveKukiFinanceDirectory(createIfMissing: false);
+                if (!string.IsNullOrWhiteSpace(oneDriveDir))
+                    sources.Add(oneDriveDir);
+            }
+            catch
+            {
+                // ignore if OneDrive isn't available
+            }
+
+            // Legacy shared-machine store
+            sources.Add(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                AppFolderName));
+
+            // Legacy per-user store (non-packaged path)
+            sources.Add(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                AppFolderName));
+#else
+            // Non-Windows: prior versions may have used LocalApplicationData\KukiFinance
+            sources.Add(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                AppFolderName));
+#endif
+
+            foreach (var src in sources.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(src) || !Directory.Exists(src))
                     continue;
 
                 var files = Directory.EnumerateFiles(src, "*", SearchOption.TopDirectoryOnly).ToList();
                 if (files.Count == 0)
                     continue;
 
-                Directory.CreateDirectory(oneDriveDir);
-
                 foreach (var file in files)
                 {
-                    var dest = Path.Combine(oneDriveDir, Path.GetFileName(file));
+                    var dest = Path.Combine(localStateDir, Path.GetFileName(file));
+
+                    // Don't overwrite: if the user already has a file in LocalState, keep it.
+                    if (File.Exists(dest))
+                        continue;
+
                     File.Copy(file, dest, overwrite: false);
                 }
 
-                // migrated from the first valid source; stop.
+                // migrated from the first valid source; stop
                 break;
             }
         }
         catch
         {
-            // ignore migration issues; app still functions using OneDrive folder
+            // Never block app startup on migration; user can still proceed and import/export manually.
         }
-    }
-#endif
-
-    private static void EnsureDirectoryExistsWithUserWriteAccess(string path)
-    {
-        Directory.CreateDirectory(path);
-
-#if WINDOWS
-        try
-        {
-            // Make sure all standard users can read/write the shared data directory.
-            var di = new DirectoryInfo(path);
-            var ds = di.GetAccessControl();
-
-            var usersSid = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null);
-            var rule = new FileSystemAccessRule(
-                usersSid,
-                FileSystemRights.ReadAndExecute |
-                FileSystemRights.ListDirectory |
-                FileSystemRights.Read |
-                FileSystemRights.Write |
-                FileSystemRights.Modify |
-                FileSystemRights.CreateFiles |
-                FileSystemRights.CreateDirectories |
-                FileSystemRights.Delete,
-                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
-                PropagationFlags.None,
-                AccessControlType.Allow);
-
-            bool modified = false;
-            ds.ModifyAccessRule(AccessControlModification.Add, rule, out modified);
-
-            if (modified)
-                di.SetAccessControl(ds);
-        }
-        catch
-        {
-            // If ACL update fails, directory still exists; the app may be limited by OS policy.
-            // Swallow to avoid blocking app startup.
-        }
-#endif
     }
 }
