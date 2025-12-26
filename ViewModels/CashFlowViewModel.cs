@@ -23,6 +23,14 @@ public sealed class CashFlowDetail
     public decimal Amount { get; set; }
 }
 
+internal sealed class ForecastItem
+{
+    public string Frequency { get; set; } = "";
+    public string ForecastMonth { get; set; } = "";
+    public string Category { get; set; } = "";
+    public decimal Amount { get; set; }
+}
+
 public partial class CashFlowViewModel : ObservableObject
 {
     private static readonly CsvConfiguration CsvConfig = new(CultureInfo.InvariantCulture)
@@ -45,9 +53,16 @@ public partial class CashFlowViewModel : ObservableObject
     [ObservableProperty]
     private string? loadError;
 
+    public bool HasError => !string.IsNullOrWhiteSpace(LoadError);
+
     public CashFlowViewModel()
     {
         LoadProjections();
+    }
+
+    partial void OnLoadErrorChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasError));
     }
 
     partial void OnSelectedProjectionChanged(CashFlowProjection? value)
@@ -76,10 +91,8 @@ public partial class CashFlowViewModel : ObservableObject
 
             decimal openingBalance = GetOpeningBalanceFromBmo(bmoFile, firstOfThisMonth);
 
-            var incomeCategories = GetIncomeCategories();
-
-            // Read forecast rows once
-            var forecastRows = ReadCsvRows(forecastFile).ToList();
+            // Read forecast once, strongly and currency-safe
+            var forecastItems = ReadForecastItems(forecastFile);
 
             decimal prevEndingBalance = openingBalance;
 
@@ -91,25 +104,15 @@ public partial class CashFlowViewModel : ObservableObject
                 decimal income = 0;
                 decimal expenses = 0;
 
-                foreach (var row in forecastRows)
+                foreach (var item in forecastItems)
                 {
-                    if (row.Length < 5) continue;
-
-                    var frequency = (row[0] ?? "").Trim();
-                    var forecastMonth = (row[1] ?? "").Trim();
-                    var category = (row[3] ?? "").Trim();
-                    var amountStr = (row[4] ?? "").Trim();
-
-                    if (!decimal.TryParse(amountStr, NumberStyles.Any, CultureInfo.InvariantCulture, out var amt))
+                    if (!ShouldInclude(item.Frequency, item.ForecastMonth, monthDate, firstOfThisMonth))
                         continue;
 
-                    if (!ShouldInclude(frequency, forecastMonth, monthDate, firstOfThisMonth))
-                        continue;
-
-                    if (incomeCategories.Contains(category) && amt > 0)
-                        income += amt;
-                    else if (amt < 0)
-                        expenses += amt;
+                    if (item.Amount > 0)
+                        income += item.Amount;
+                    else if (item.Amount < 0)
+                        expenses += item.Amount;
                 }
 
                 var ending = prevEndingBalance + income + expenses;
@@ -128,14 +131,6 @@ public partial class CashFlowViewModel : ObservableObject
 
             SelectedProjection = Projections.FirstOrDefault();
         }
-        catch (FileNotFoundException ex)
-        {
-            LoadError = ex.Message;
-        }
-        catch (InvalidDataException ex)
-        {
-            LoadError = ex.Message;
-        }
         catch (Exception ex)
         {
             LoadError = $"Cash flow load failed: {ex.Message}";
@@ -153,11 +148,9 @@ public partial class CashFlowViewModel : ObservableObject
         try
         {
             string forecastFile = FilePathHelper.GetKukiFinancePath("ForecastExpenses.csv");
-            var forecastRows = ReadCsvRows(forecastFile).ToList();
 
-            var incomeCategories = GetIncomeCategories();
+            var forecastItems = ReadForecastItems(forecastFile);
 
-            // SelectedProjection.Month is "yyyy-MM"
             var selectedMonthDate = DateTime.ParseExact(
                 SelectedProjection.Month,
                 "yyyy-MM",
@@ -166,76 +159,58 @@ public partial class CashFlowViewModel : ObservableObject
 
             var selectedFirstOfMonth = new DateTime(selectedMonthDate.Year, selectedMonthDate.Month, 1);
 
-            // Base month for relative calculations (must match projections generation)
             DateTime today = DateTime.Today;
             DateTime firstOfThisMonth = new(today.Year, today.Month, 1);
 
-            foreach (var row in forecastRows)
+            foreach (var item in forecastItems)
             {
-                if (row.Length < 5) continue;
-
-                var frequency = (row[0] ?? "").Trim();
-                var forecastMonth = (row[1] ?? "").Trim();
-                var category = (row[3] ?? "").Trim();
-                var amountStr = (row[4] ?? "").Trim();
-
-                if (!decimal.TryParse(amountStr, NumberStyles.Any, CultureInfo.InvariantCulture, out var amt))
+                if (!ShouldInclude(item.Frequency, item.ForecastMonth, selectedFirstOfMonth, firstOfThisMonth))
                     continue;
 
-                if (!ShouldInclude(frequency, forecastMonth, selectedFirstOfMonth, firstOfThisMonth))
-                    continue;
-
-                if (incomeCategories.Contains(category) && amt > 0)
-                {
-                    SelectedMonthIncome.Add(new CashFlowDetail { Category = category, Amount = amt });
-                }
-                else if (amt < 0)
-                {
-                    SelectedMonthExpenses.Add(new CashFlowDetail { Category = category, Amount = amt });
-                }
+                if (item.Amount > 0)
+                    SelectedMonthIncome.Add(new CashFlowDetail { Category = item.Category, Amount = item.Amount });
+                else if (item.Amount < 0)
+                    SelectedMonthExpenses.Add(new CashFlowDetail { Category = item.Category, Amount = item.Amount });
             }
         }
         catch (Exception ex)
         {
-            // Don’t overwrite a file-level error from LoadProjections if it already exists
             LoadError ??= $"Cash flow detail load failed: {ex.Message}";
         }
     }
-
-    private static HashSet<string> GetIncomeCategories() =>
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            "Income - Interest",
-            "Income - Other",
-            "Income - Reimbursement",
-            "Salary - Ed",
-            "Salary - Patti"
-        };
 
     private static decimal GetOpeningBalanceFromBmo(string bmoFile, DateTime firstOfMonth)
     {
         if (!File.Exists(bmoFile))
             throw new FileNotFoundException($"Required file not found: {bmoFile}", bmoFile);
 
-        // Your original logic used column 0 = date, column 4 = balance.
-        // We keep that assumption but parse using CsvHelper safely.
         decimal openingBalance = 0;
 
-        // Read all rows, then walk backwards to find the last balance <= firstOfMonth
-        var rows = ReadCsvRows(bmoFile).ToList();
+        using var reader = new StreamReader(bmoFile);
+        using var csv = new CsvReader(reader, CsvConfig);
+
+        // Column assumptions from your prior logic: col0 = date, col4 = balance
+        var rows = new List<string[]>();
+        while (csv.Read())
+        {
+            var row = csv.Parser.Record;
+            if (row is null || row.Length == 0) continue;
+            rows.Add(row);
+        }
 
         for (int i = rows.Count - 1; i >= 0; i--)
         {
             var r = rows[i];
             if (r.Length < 5) continue;
 
-            if (!DateTime.TryParse(r[0], CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var date))
+            if (!DateTime.TryParse(r[0], CultureInfo.CurrentCulture, DateTimeStyles.AssumeLocal, out var date) &&
+                !DateTime.TryParse(r[0], CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out date))
                 continue;
 
             if (date > firstOfMonth)
                 continue;
 
-            if (decimal.TryParse(r[4], NumberStyles.Any, CultureInfo.InvariantCulture, out var bal))
+            if (TryParseMoney(r[4], out var bal))
             {
                 openingBalance = bal;
                 break;
@@ -245,51 +220,114 @@ public partial class CashFlowViewModel : ObservableObject
         return openingBalance;
     }
 
-    private static IEnumerable<string[]> ReadCsvRows(string path)
+    private static List<ForecastItem> ReadForecastItems(string forecastFile)
     {
-        if (!File.Exists(path))
-            throw new FileNotFoundException($"Required file not found: {path}", path);
+        if (!File.Exists(forecastFile))
+            throw new FileNotFoundException($"Required file not found: {forecastFile}", forecastFile);
 
-        using var reader = new StreamReader(path);
+        using var reader = new StreamReader(forecastFile);
         using var csv = new CsvReader(reader, CsvConfig);
+
+        // Read header so we can locate columns by name (robust)
+        if (!csv.Read())
+            return new List<ForecastItem>();
+
+        csv.ReadHeader();
+        var headers = csv.HeaderRecord ?? Array.Empty<string>();
+
+        int idxFrequency = FindIndex(headers, "Frequency", "Freq");
+        int idxMonth = FindIndex(headers, "Month", "StartMonth", "ForecastMonth");
+        int idxCategory = FindIndex(headers, "Category");
+        int idxAmount = FindIndex(headers, "Amount", "Value");
+
+        // Fallback to your original index assumptions if headers are missing
+        if (idxFrequency < 0) idxFrequency = 0;
+        if (idxMonth < 0) idxMonth = 1;
+        if (idxCategory < 0) idxCategory = 3;
+        if (idxAmount < 0) idxAmount = 4;
+
+        var list = new List<ForecastItem>();
 
         while (csv.Read())
         {
-            var row = csv.Parser.Record;
-            if (row is null || row.Length == 0) continue;
-            yield return row;
+            string frequency = SafeGet(csv, idxFrequency);
+            string month = SafeGet(csv, idxMonth);
+            string category = SafeGet(csv, idxCategory);
+            string amountStr = SafeGet(csv, idxAmount);
+
+            if (!TryParseMoney(amountStr, out var amt))
+                continue;
+
+            list.Add(new ForecastItem
+            {
+                Frequency = frequency,
+                ForecastMonth = month,
+                Category = category,
+                Amount = amt
+            });
         }
+
+        return list;
     }
 
-    /// <summary>
-    /// Determines whether a forecast row should be applied to the target month.
-    ///
-    /// frequency examples expected:
-    /// - "Monthly" or "All" => every month
-    /// - "Annual" => only when target month == forecastMonth
-    /// - "Once" => only when target month == forecastMonth (within 12-month window)
-    /// - "N Months" (e.g., "3 Months") => every N months starting at forecastMonth
-    /// </summary>
+    private static string SafeGet(CsvReader csv, int index)
+    {
+        try { return (csv.GetField(index) ?? "").Trim(); }
+        catch { return ""; }
+    }
+
+    private static int FindIndex(string[] headers, params string[] candidates)
+    {
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var h = (headers[i] ?? "").Trim();
+            foreach (var c in candidates)
+            {
+                if (string.Equals(h, c, StringComparison.OrdinalIgnoreCase))
+                    return i;
+            }
+        }
+        return -1;
+    }
+
+    private static bool TryParseMoney(string? s, out decimal value)
+    {
+        value = 0;
+        if (string.IsNullOrWhiteSpace(s)) return false;
+
+        // Try currency in current culture first (handles $ and local formatting)
+        if (decimal.TryParse(s, NumberStyles.Currency, CultureInfo.CurrentCulture, out value))
+            return true;
+
+        // Try currency in invariant (handles $ in many cases too)
+        if (decimal.TryParse(s, NumberStyles.Currency, CultureInfo.InvariantCulture, out value))
+            return true;
+
+        // Last resort: strip common symbols and retry
+        var cleaned = s.Replace("$", "").Replace(",", "").Trim();
+        return decimal.TryParse(cleaned, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out value);
+    }
+
     private static bool ShouldInclude(string frequency, string forecastMonth, DateTime targetMonth, DateTime baseMonth)
     {
         var freq = (frequency ?? "").Trim();
 
-        if (string.Equals(freq, "Monthly", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(freq, "All", StringComparison.OrdinalIgnoreCase))
+        // Treat blank as monthly
+        if (string.IsNullOrEmpty(freq) ||
+            string.Equals(freq, "Monthly", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(freq, "All", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(freq, "Every Month", StringComparison.OrdinalIgnoreCase))
             return true;
 
         int startMonthNum = MonthNameToNumber(forecastMonth);
         if (startMonthNum <= 0) return false;
 
-        // Annual / Once: include when month matches (and the target month is within our projection window naturally)
         if (string.Equals(freq, "Annual", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(freq, "Once", StringComparison.OrdinalIgnoreCase))
         {
             return targetMonth.Month == startMonthNum;
         }
 
-        // N Months: include if targetMonth is on the schedule starting at forecastMonth
-        // Define a start date that is the first occurrence of forecastMonth on/after baseMonth.
         if (freq.EndsWith("Months", StringComparison.OrdinalIgnoreCase))
         {
             var firstToken = freq.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
@@ -297,28 +335,23 @@ public partial class CashFlowViewModel : ObservableObject
 
             var start = new DateTime(baseMonth.Year, startMonthNum, 1);
             if (start < baseMonth)
-                start = start.AddYears(1); // next year’s occurrence
+                start = start.AddYears(1);
 
             if (targetMonth < start)
                 return false;
 
-            int monthsDiff = MonthsBetween(start, targetMonth);
+            int monthsDiff = (targetMonth.Year - start.Year) * 12 + (targetMonth.Month - start.Month);
             return monthsDiff % n == 0;
         }
 
         return false;
     }
 
-    private static int MonthsBetween(DateTime start, DateTime end)
-        => (end.Year - start.Year) * 12 + (end.Month - start.Month);
-
     private static int MonthNameToNumber(string month)
     {
         if (string.IsNullOrWhiteSpace(month))
             return 0;
 
-        // Handles "January", "Jan", etc. by letting DateTime parse it
-        // but we’ll also keep a safe fallback for odd formats.
         if (DateTime.TryParseExact(month.Trim(),
             new[] { "MMMM", "MMM" },
             CultureInfo.InvariantCulture,

@@ -15,7 +15,7 @@
         <!-- ================= ERROR MESSAGE ================= -->
         <Frame
             Grid.Row="0"
-            IsVisible="{Binding LoadError}"
+            IsVisible="{Binding HasError}"
             BackgroundColor="#FFEEEE"
             BorderColor="Red"
             Padding="10"
