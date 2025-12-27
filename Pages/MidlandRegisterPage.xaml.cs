@@ -64,9 +64,10 @@ namespace KukiFinance.Pages
                     Amount = decimal.TryParse(parts[2].Trim(), out var amt) ? amt : 0
                 },
                 entry => entry.Date ?? DateTime.MinValue,
-                entry => entry.Balance,
-                entry => entry.Amount ?? 0,
+                entry => entry.Amount ?? 0,   // getAmount
+                entry => entry.Balance,       // getBalance
                 (entry, balance) => entry.Balance = balance,
+
                 new RegistryEntry
                 {
                     Date = openingBalanceDate ?? DateTime.Today.AddDays(-1),
