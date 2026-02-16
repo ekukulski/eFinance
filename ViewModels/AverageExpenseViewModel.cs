@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using CsvHelper;
+using eFinance.Models;
 using System.IO;
 using System.Linq;
 using eFinance.Models;

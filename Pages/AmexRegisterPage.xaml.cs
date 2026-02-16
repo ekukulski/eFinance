@@ -9,6 +9,18 @@ using eFinance.Data.Repositories;
 using eFinance.Models;
 using Microsoft.Data.Sqlite;
 using Microsoft.Maui.Controls;
+using eFinance.Models;
+using eFinance.Services;
+using Microsoft.Maui.Controls;
+using System.IO;
+using System.Linq;
+using System.Collections.Generic;
+using System;
+using System.Globalization;
+using CsvHelper;
+using eFinance.Constants;
+using eFinance.Helpers;
+>>>>>>> Update
 
 namespace eFinance.Pages
 {
@@ -23,6 +35,15 @@ namespace eFinance.Pages
         private readonly SqliteDatabase _db;
         private readonly AccountRepository _accounts;
         private readonly TransactionRepository _transactions;
+
+        // File paths and opening balance
+        private readonly string registerFile = FilePathHelper.GeteFinancePath("AMEX.csv");
+        private readonly string currentFile = FilePathHelper.GeteFinancePath("AMEXCurrent.csv");
+        private readonly string transactionsFile = FilePathHelper.GeteFinancePath("transactionsAMEX.csv");
+        private readonly string categoryFile = FilePathHelper.GeteFinancePath("Category.csv");
+        private readonly decimal openingBalance = OpeningBalances.Get("Amex");
+        private readonly DateTime? openingBalanceDate = OpeningBalances.GetDate("Amex");
+	Update
 
         private readonly RegisterViewModel viewModel = new();
 

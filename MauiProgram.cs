@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using eFinance.Data;
 using eFinance.Data.Repositories;
 using eFinance.Importing;
 using eFinance.Pages;
+using eFinance.Services;
 using eFinance.Services;
 using eFinance.ViewModels;
 using LiveChartsCore.SkiaSharpView.Maui;
@@ -52,6 +53,13 @@ public static class MauiProgram
         // Services / Infrastructure
         // -----------------------------
         builder.Services.AddSingleton<INavigationService, NavigationService>();
+<<<<<<< HEAD
+=======
+        builder.Services.AddTransient<MainPageViewModel>();
+        builder.Services.AddTransient<MainPage>();
+        builder.Services.AddTransient<eFinance.Pages.DataSyncPage>();
+        builder.Services.AddSingleton<AppShell>();
+>>>>>>> Update
         builder.Services.AddSingleton<IWindowSizingService, WindowSizingService>();
         builder.Services.AddSingleton<ICsvFileService, CsvFileService>();
         builder.Services.AddSingleton<ICloudSyncService, CloudSyncService>();

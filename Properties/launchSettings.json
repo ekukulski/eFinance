@@ -1,9 +1,9 @@
 {
     "profiles": {
-        "KukiFinance": {
+        "eFinance": {
             "commandName": "Project"
         },
-        "KukiFinance (MSIX)": {
+        "eFinance (MSIX)": {
             "commandName": "MsixPackage"
         }
     }

@@ -1,3 +1,4 @@
+using eFinance.Models;
 using eFinance.Services;
 using eFinance.Helpers;
 using Microsoft.Maui.Controls;

@@ -9,6 +9,8 @@ using eFinance.Helpers;
 using eFinance.Importing;
 using eFinance.Services;
 using Microsoft.Data.Sqlite;
+using eFinance.Helpers;
+using eFinance.Services;
 using Microsoft.Maui.Dispatching;
 using Microsoft.Maui.Storage;
 

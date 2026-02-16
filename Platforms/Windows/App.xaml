@@ -1,8 +1,8 @@
 ﻿<maui:MauiWinUIApplication
-    x:Class="KukiFinance.WinUI.App"
+    x:Class="eFinance.WinUI.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:maui="using:Microsoft.Maui"
-    xmlns:local="using:KukiFinance.WinUI">
+    xmlns:local="using:eFinance.WinUI">
 
 </maui:MauiWinUIApplication>
