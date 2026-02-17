@@ -14,14 +14,21 @@ namespace eFinance.Importing
         private readonly ConcurrentDictionary<string, DateTime> _pending = new();
         private readonly Timer _timer;
 
+        private readonly string _folderPath;
+        private readonly string _archiveFolderPath;
+
         public ImportWatcher(string folderPath, ImportPipeline pipeline)
         {
             if (string.IsNullOrWhiteSpace(folderPath)) throw new ArgumentNullException(nameof(folderPath));
             _pipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
 
-            Directory.CreateDirectory(folderPath);
+            _folderPath = folderPath;
+            _archiveFolderPath = Path.Combine(_folderPath, "Archive");
 
-            _watcher = new FileSystemWatcher(folderPath)
+            Directory.CreateDirectory(_folderPath);
+            Directory.CreateDirectory(_archiveFolderPath);
+
+            _watcher = new FileSystemWatcher(_folderPath)
             {
                 IncludeSubdirectories = false,
                 EnableRaisingEvents = false,
@@ -51,12 +58,35 @@ namespace eFinance.Importing
 
         private void OnChanged(object sender, FileSystemEventArgs e)
         {
+            // Ignore anything already in Archive (defensive)
+            if (IsUnderArchive(e.FullPath)) return;
+
             _pending[e.FullPath] = DateTime.UtcNow;
         }
 
         private void OnRenamed(object sender, RenamedEventArgs e)
         {
+            if (IsUnderArchive(e.FullPath)) return;
+
             _pending[e.FullPath] = DateTime.UtcNow;
+        }
+
+        private bool IsUnderArchive(string fullPath)
+        {
+            try
+            {
+                var archiveFull = Path.GetFullPath(_archiveFolderPath)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    + Path.DirectorySeparatorChar;
+
+                var pathFull = Path.GetFullPath(fullPath);
+
+                return pathFull.StartsWith(archiveFull, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private async Task ProcessPendingAsync()
@@ -86,8 +116,21 @@ namespace eFinance.Importing
                     try
                     {
                         var result = await _pipeline.ImportAsync(path);
+
                         System.Diagnostics.Debug.WriteLine(
                             $"Imported '{Path.GetFileName(path)}': inserted={result.Inserted}, ignored={result.Ignored}, failed={result.Failed}");
+
+                        // ✅ Archive only if we actually processed anything (inserted or ignored).
+                        // If everything failed, leave it in place for inspection.
+                        if (result.Inserted + result.Ignored > 0)
+                        {
+                            TryArchiveFile(path);
+                        }
+                        else
+                        {
+                            System.Diagnostics.Debug.WriteLine(
+                                $"Not archiving '{Path.GetFileName(path)}' because nothing was processed (all failed or empty).");
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -98,6 +141,44 @@ namespace eFinance.Importing
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("ImportWatcher.ProcessPendingAsync error: " + ex);
+            }
+        }
+
+        private void TryArchiveFile(string path)
+        {
+            try
+            {
+                if (!File.Exists(path))
+                    return;
+
+                Directory.CreateDirectory(_archiveFolderPath);
+
+                var fileName = Path.GetFileNameWithoutExtension(path);
+                var ext = Path.GetExtension(path);
+
+                // Timestamped archive name to avoid collisions and preserve history
+                var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                var archivedName = $"{fileName}-{stamp}{ext}";
+                var destPath = Path.Combine(_archiveFolderPath, archivedName);
+
+                // In the rare case of same-second collision, add a counter
+                int counter = 1;
+                while (File.Exists(destPath))
+                {
+                    destPath = Path.Combine(_archiveFolderPath, $"{fileName}-{stamp}-{counter}{ext}");
+                    counter++;
+                }
+
+                File.Move(path, destPath);
+
+                System.Diagnostics.Debug.WriteLine(
+                    $"Archived '{Path.GetFileName(path)}' -> '{destPath}'");
+            }
+            catch (Exception ex)
+            {
+                // If archive fails, don't crash the watcher — just log it.
+                System.Diagnostics.Debug.WriteLine(
+                    $"Archive failed for '{path}': {ex}");
             }
         }
 

@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Globalization;
+using System.Linq;
+using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using eFinance.Data.Models;
 using eFinance.Data.Repositories;
@@ -26,9 +29,38 @@ namespace eFinance.Importing
         {
             if (string.IsNullOrWhiteSpace(filePath)) return false;
             if (!filePath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!File.Exists(filePath)) return false;
 
-            var name = System.IO.Path.GetFileName(filePath);
-            return name.Contains("amex", StringComparison.OrdinalIgnoreCase);
+            var fileName = Path.GetFileName(filePath);
+
+            // Convenience: allow historical naming AND the AMEX default download name.
+            var nameLooksLikeAmex =
+                fileName.Contains("amex", StringComparison.OrdinalIgnoreCase) ||
+                fileName.Equals("activity.csv", StringComparison.OrdinalIgnoreCase);
+
+            // Strong check: detect AMEX by header columns.
+            // Your AMEX activity.csv header is:
+            // Date,Description,Card Member,Account #,Amount
+            var header = File.ReadLines(filePath).FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(header))
+            {
+                var cols = header.Split(',')
+                                 .Select(c => c.Trim().Trim('"'))
+                                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                bool hasAmexHeaders =
+                    cols.Contains("Date") &&
+                    cols.Contains("Description") &&
+                    cols.Contains("Card Member") &&
+                    cols.Contains("Account #") &&
+                    cols.Contains("Amount");
+
+                if (hasAmexHeaders)
+                    return true;
+            }
+
+            // Fallback: filename heuristic.
+            return nameLooksLikeAmex;
         }
 
         public async Task<ImportResult> ImportAsync(string filePath)
