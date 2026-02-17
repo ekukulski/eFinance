@@ -82,39 +82,46 @@ SELECT changes();
             using var conn = _db.OpenConnection();
             using var cmd = conn.CreateCommand();
 
-            var where = "AccountId = $accountId";
+            // NOTE: prefix with t. because we join Categories
+            var where = "t.AccountId = $accountId";
             cmd.Parameters.AddWithValue("$accountId", accountId);
 
             if (start is not null)
             {
-                where += " AND PostedDate >= $start";
+                where += " AND t.PostedDate >= $start";
                 cmd.Parameters.AddWithValue("$start", start.Value.ToString("yyyy-MM-dd"));
             }
 
             if (end is not null)
             {
-                where += " AND PostedDate <= $end";
+                where += " AND t.PostedDate <= $end";
                 cmd.Parameters.AddWithValue("$end", end.Value.ToString("yyyy-MM-dd"));
             }
 
             cmd.CommandText = $@"
 SELECT
-  Id,
-  AccountId,
-  PostedDate,
-  Description,
-  Amount,
-  Category,
-  CategoryId,
-  MatchedRuleId,
-  MatchedRulePattern,
-  CategorizedUtc,
-  FitId,
-  Source,
-  CreatedUtc
-FROM Transactions
+  t.Id,
+  t.AccountId,
+  t.PostedDate,
+  t.Description,
+  t.Amount,
+
+  -- IMPORTANT:
+  -- Old rows often have Category = '' (empty string), not NULL.
+  -- NULLIF(TRIM(...),'') turns empty/whitespace into NULL so we can fall back to Categories.Name.
+  COALESCE(NULLIF(TRIM(t.Category), ''), c.Name) AS Category,
+
+  t.CategoryId,
+  t.MatchedRuleId,
+  t.MatchedRulePattern,
+  t.CategorizedUtc,
+  t.FitId,
+  t.Source,
+  t.CreatedUtc
+FROM Transactions t
+LEFT JOIN Categories c ON c.Id = t.CategoryId
 WHERE {where}
-ORDER BY PostedDate DESC, Id DESC;
+ORDER BY t.PostedDate DESC, t.Id DESC;
 ";
 
             var results = new List<Transaction>();
@@ -130,9 +137,10 @@ ORDER BY PostedDate DESC, Id DESC;
                     Description = r.GetString(3),
                     Amount = (decimal)r.GetDouble(4),
 
+                    // This is the display category name (legacy Category if present, else Categories.Name)
                     Category = r.IsDBNull(5) ? null : r.GetString(5),
-                    CategoryId = r.IsDBNull(6) ? null : r.GetInt64(6),
 
+                    CategoryId = r.IsDBNull(6) ? null : r.GetInt64(6),
                     MatchedRuleId = r.IsDBNull(7) ? null : r.GetInt64(7),
                     MatchedRulePattern = r.IsDBNull(8) ? null : r.GetString(8),
 
@@ -157,13 +165,19 @@ ORDER BY PostedDate DESC, Id DESC;
             cmd.Parameters.AddWithValue("$desc", t.Description);
             cmd.Parameters.AddWithValue("$amount", (double)t.Amount);
 
+            // Legacy text category column (UI fallback / transitional)
             cmd.Parameters.AddWithValue("$cat", (object?)t.Category ?? DBNull.Value);
 
+            // New category-rule based columns
             cmd.Parameters.AddWithValue("$categoryId", (object?)t.CategoryId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$matchedRuleId", (object?)t.MatchedRuleId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$matchedRulePattern", (object?)t.MatchedRulePattern ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$categorizedUtc",
-                t.CategorizedUtc is null ? DBNull.Value : t.CategorizedUtc.Value.ToString("O"));
+
+            cmd.Parameters.AddWithValue(
+                "$categorizedUtc",
+                t.CategorizedUtc is null
+                    ? DBNull.Value
+                    : t.CategorizedUtc.Value.ToString("O"));
 
             cmd.Parameters.AddWithValue("$fitId", (object?)t.FitId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$source", (object?)t.Source ?? DBNull.Value);
