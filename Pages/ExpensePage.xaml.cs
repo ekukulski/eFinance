@@ -5,10 +5,10 @@ using System.IO;
 using System.Linq;
 using CsvHelper;
 using Microsoft.Maui.Controls;
-using KukiFinance.Helpers;
-using KukiFinance.Models;
+using eFinance.Helpers;
+using eFinance.Models;
 
-namespace KukiFinance.Pages
+namespace eFinance.Pages
 {
     public partial class ExpensePage : ContentPage
     {
@@ -45,10 +45,10 @@ namespace KukiFinance.Pages
         }
 
         private static IEnumerable<string> GetCsvFilePaths()
-            => CsvFiles.Select(FilePathHelper.GetKukiFinancePath);
+            => CsvFiles.Select(FilePathHelper.GeteFinancePath);
 
         private static string GetExcludedCategoriesPath()
-            => FilePathHelper.GetKukiFinancePath("ExcludedCategories.csv");
+            => FilePathHelper.GeteFinancePath("ExcludedCategories.csv");
 
         private static HashSet<string> GetExcludedCategoriesFromCsv()
         {

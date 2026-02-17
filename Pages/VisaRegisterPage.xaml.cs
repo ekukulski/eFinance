@@ -1,5 +1,4 @@
-using KukiFinance.Models;
-using KukiFinance.Services;
+using eFinance.Services;
 using Microsoft.Maui.Controls;
 using System.IO;
 using System.Linq;
@@ -7,18 +6,19 @@ using System.Collections.Generic;
 using System;
 using System.Globalization;
 using CsvHelper;
-using KukiFinance.Constants;
-using KukiFinance.Helpers;
+using eFinance.Constants;
+using eFinance.Helpers;
+using eFinance.Models;
 
-namespace KukiFinance.Pages
+namespace eFinance.Pages
 {
     public partial class VisaRegisterPage : ContentPage
     {
         // File paths and opening balance
-        private readonly string registerFile = FilePathHelper.GetKukiFinancePath("Visa.csv");
-        private readonly string currentFile = FilePathHelper.GetKukiFinancePath("VisaCurrent.csv");
-        private readonly string transactionsFile = FilePathHelper.GetKukiFinancePath("transactionsVisa.csv");
-        private readonly string categoryFile = FilePathHelper.GetKukiFinancePath("Category.csv");
+        private readonly string registerFile = FilePathHelper.GeteFinancePath("Visa.csv");
+        private readonly string currentFile = FilePathHelper.GeteFinancePath("VisaCurrent.csv");
+        private readonly string transactionsFile = FilePathHelper.GeteFinancePath("transactionsVisa.csv");
+        private readonly string categoryFile = FilePathHelper.GeteFinancePath("Category.csv");
         private readonly decimal openingBalance = OpeningBalances.Get("Visa");
 
         private readonly RegisterViewModel viewModel = new();

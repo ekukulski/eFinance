@@ -1,1 +1,1 @@
-﻿global using KukiFinance.Helpers;
+﻿global using eFinance.Helpers;

@@ -1,7 +1,7 @@
 ﻿using CsvHelper.Configuration;
-using KukiFinance.Models;
+using eFinance.Models;
 
-namespace KukiFinance.Helpers;
+namespace eFinance.Helpers;
 
 public sealed class CurrentRegisterEntryMap : ClassMap<RegistryEntry>
 {

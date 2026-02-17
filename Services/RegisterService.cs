@@ -6,7 +6,7 @@ using System.Linq;
 using CsvHelper;
 using CsvHelper.Configuration;
 
-namespace KukiFinance.Services;
+namespace eFinance.Services;
 
 public static class RegisterService
 {
@@ -21,7 +21,7 @@ public static class RegisterService
     };
 
     /// <summary>
-    /// Loads a register from a CSV file, reads categories (optional), inserts an opening row,
+    /// Loads a register from a CSV file, inserts an opening row, sorts by date,
     /// and calculates running balances.
     ///
     /// Supports custom amount logic (e.g., for AMEX) via getAmountForBalance.
@@ -36,25 +36,97 @@ public static class RegisterService
         Func<TEntry, decimal> getBalance,
         Action<TEntry, decimal> setBalance,
         TEntry openingEntry,
-        Func<TEntry, decimal>? getAmountForBalance = null
-    )
+        Func<TEntry, decimal>? getAmountForBalance = null)
     {
-        // 1) Validate inputs early (better errors)
+        // Validate required args
         if (string.IsNullOrWhiteSpace(registerFile))
             throw new ArgumentException("Register file path is blank.", nameof(registerFile));
 
         if (!File.Exists(registerFile))
             throw new FileNotFoundException($"Register file not found: {registerFile}", registerFile);
 
-        // 2) Read register rows using CsvHelper (handles quotes/commas correctly)
-        var entries = ReadRows(registerFile, entryFactory);
+        if (entryFactory is null) throw new ArgumentNullException(nameof(entryFactory));
+        if (getDate is null) throw new ArgumentNullException(nameof(getDate));
+        if (getAmount is null) throw new ArgumentNullException(nameof(getAmount));
+        if (getBalance is null) throw new ArgumentNullException(nameof(getBalance));
+        if (setBalance is null) throw new ArgumentNullException(nameof(setBalance));
 
-        // 3) Sort, insert opening entry
+        // categoryFile is currently unused here; keep the parameter for compatibility
+        _ = categoryFile;
+
+        // Read rows -> entries
+        var entries = ReadEntries(registerFile, entryFactory);
+
+        // Sort and insert opening entry
         entries = entries.OrderBy(getDate).ToList();
         entries.Insert(0, openingEntry);
 
-        // 4) Running balance calculation
-        var amountForBalance = getAmountForBalance ?? getAmount;
+        // Calculate running balance
+        ApplyRunningBalance(
+            entries,
+            openingBalance,
+            getBalance,
+            setBalance,
+            getAmountForBalance ?? getAmount);
+
+        return entries;
+    }
+
+    private static List<TEntry> ReadEntries<TEntry>(
+        string registerFile,
+        Func<string[], TEntry> entryFactory)
+    {
+        var entries = new List<TEntry>();
+
+        using var reader = new StreamReader(registerFile);
+        using var csv = new CsvReader(reader, CsvConfig);
+
+        while (csv.Read())
+        {
+            // csv.Parser.Record is string[]? in nullable annotations
+            var record = csv.Parser.Record;
+            if (record is null || record.Length == 0)
+                continue;
+
+            try
+            {
+                entries.Add(entryFactory(record));
+            }
+            catch (Exception ex)
+            {
+                throw BuildRowParseException(registerFile, csv, ex);
+            }
+        }
+
+        return entries;
+    }
+
+    private static Exception BuildRowParseException(
+        string registerFile,
+        CsvReader csv,
+        Exception ex)
+    {
+        var fileName = Path.GetFileName(registerFile);
+
+        // CsvHelper annotations may mark Context/Parser nullable; don’t crash while reporting errors
+        var rowNumber = csv.Context?.Parser?.Row ?? -1;
+        var rowLabel = rowNumber >= 0
+            ? rowNumber.ToString(CultureInfo.InvariantCulture)
+            : "unknown";
+
+        var message = $"Failed to parse row {rowLabel} in {fileName}: {ex.Message}";
+        return new InvalidDataException(message, ex);
+    }
+
+    private static void ApplyRunningBalance<TEntry>(
+        IList<TEntry> entries,
+        decimal openingBalance,
+        Func<TEntry, decimal> getBalance,
+        Action<TEntry, decimal> setBalance,
+        Func<TEntry, decimal> amountForBalance)
+    {
+        if (entries.Count == 0)
+            return;
 
         setBalance(entries[0], openingBalance);
 
@@ -64,63 +136,5 @@ public static class RegisterService
             var currAmount = amountForBalance(entries[i]);
             setBalance(entries[i], prevBalance + currAmount);
         }
-
-        return entries;
-    }
-
-    private static Dictionary<string, string> ReadCategoriesIfPresent(string categoryFile)
-    {
-        var categories = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        if (string.IsNullOrWhiteSpace(categoryFile) || !File.Exists(categoryFile))
-            return categories;
-
-        using var reader = new StreamReader(categoryFile);
-        using var csv = new CsvReader(reader, CsvConfig);
-
-        // Expecting headers: at least two columns. We read raw rows so your current format works.
-        while (csv.Read())
-        {
-            var row = csv.Parser.Record;
-            if (row is null || row.Length < 2) continue;
-
-            var key = row[0]?.Trim();
-            var value = row[1]?.Trim();
-
-            if (string.IsNullOrEmpty(key)) continue;
-            if (!categories.ContainsKey(key))
-                categories[key] = value ?? string.Empty;
-        }
-
-        return categories;
-    }
-
-    private static List<TEntry> ReadRows<TEntry>(string registerFile, Func<string[], TEntry> entryFactory)
-    {
-        var entries = new List<TEntry>();
-
-        using var reader = new StreamReader(registerFile);
-        using var csv = new CsvReader(reader, CsvConfig);
-
-        while (csv.Read())
-        {
-            var row = csv.Parser.Record;
-            if (row is null || row.Length == 0) continue;
-
-            try
-            {
-                var entry = entryFactory(row);
-                entries.Add(entry);
-            }
-            catch (Exception ex)
-            {
-                // Make row-level failures diagnosable
-                throw new InvalidDataException(
-                    $"Failed to parse row {csv.Context.Parser.Row} in {Path.GetFileName(registerFile)}: {ex.Message}",
-                    ex);
-            }
-        }
-
-        return entries;
     }
 }

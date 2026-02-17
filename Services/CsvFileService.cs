@@ -2,7 +2,7 @@
 using CsvHelper.Configuration;
 using System.Globalization;
 
-namespace KukiFinance.Services;
+namespace eFinance.Services;
 
 public record FileResult<T>(bool Success, string Message, T? Data);
 

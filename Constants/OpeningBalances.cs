@@ -3,20 +3,20 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using KukiFinance.Helpers;
+using eFinance.Helpers;
 
-namespace KukiFinance.Constants
+namespace eFinance.Constants
 {
     public class OpeningBalanceEntry
     {
         public DateTime Date { get; set; }
-        public string Account { get; set; }
+        public string Account { get; set; } = string.Empty;
         public decimal Balance { get; set; }
     }
 
     public static class OpeningBalances
     {
-        private static readonly string CsvPath = FilePathHelper.GetKukiFinancePath("OpeningBalances.csv");
+        private static readonly string CsvPath = FilePathHelper.GeteFinancePath("OpeningBalances.csv");
 
         public static List<OpeningBalanceEntry> GetAllEntries()
         {
@@ -29,8 +29,6 @@ namespace KukiFinance.Constants
                         continue;
 
                     var parts = line.Split(',').Select(p => p.Trim()).ToArray();
-                    // Debug: Uncomment the next line to see what's being parsed
-                    // System.Diagnostics.Debug.WriteLine($"Line: {line} | Parts: {string.Join("|", parts)}");
 
                     if (parts.Length >= 3 &&
                         DateTime.TryParseExact(parts[0], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) &&
@@ -49,21 +47,21 @@ namespace KukiFinance.Constants
             return list;
         }
 
-        public static decimal Get(string account)
+        public static decimal Get(string? account)
         {
             var entry = GetAllEntries().FirstOrDefault(e =>
                 string.Equals(e.Account?.Trim(), account?.Trim(), StringComparison.OrdinalIgnoreCase));
             return entry?.Balance ?? 0m;
         }
 
-        public static DateTime? GetDate(string account)
+        public static DateTime? GetDate(string? account)
         {
             var entry = GetAllEntries().FirstOrDefault(e =>
                 string.Equals(e.Account?.Trim(), account?.Trim(), StringComparison.OrdinalIgnoreCase));
             return entry?.Date;
         }
 
-        public static void Update(string account, DateTime newDate, decimal newBalance)
+        public static void Update(string? account, DateTime newDate, decimal newBalance)
         {
             if (!File.Exists(CsvPath))
                 return;

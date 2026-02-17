@@ -1,8 +1,8 @@
-using KukiFinance.Models;
 using System.Collections.ObjectModel;
-using KukiFinance.Services;
+using eFinance.Services;
+using eFinance.Models;
 
-namespace KukiFinance.Pages;
+namespace eFinance.Pages;
 
 public partial class ExpenseRecordPage : ContentPage, IQueryAttributable
 {

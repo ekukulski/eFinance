@@ -2,7 +2,7 @@ using Microsoft.Maui.Controls;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace KukiFinance.Pages
+namespace eFinance.Pages
 {
     public partial class SecurityReviewPage : ContentPage
     {
@@ -10,8 +10,8 @@ namespace KukiFinance.Pages
         private int _currentIndex;
         private bool _addingNew;
         public decimal RidaAmount { get; private set; }
-        public string RidaDescription { get; private set; }
-        public List<(string Security, decimal Amount)> FinalSecurities { get; private set; }
+        public string RidaDescription { get; private set; } = string.Empty;
+        public List<(string Security, decimal Amount)> FinalSecurities { get; private set; } = new();
         public TaskCompletionSource<bool> ReviewCompleted { get; } = new();
 
         public SecurityReviewPage(List<(string Security, decimal Amount)> securities)
@@ -19,7 +19,6 @@ namespace KukiFinance.Pages
             InitializeComponent();
             _securities = new List<(string Security, decimal Amount)>(securities);
             _currentIndex = 0;
-            FinalSecurities = null;
             RidaAmount = 0;
             ShowCurrentSecurity();
         }

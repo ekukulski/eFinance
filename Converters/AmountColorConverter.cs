@@ -1,11 +1,11 @@
 using System.Globalization;
 using Microsoft.Maui.Controls;
 
-namespace KukiFinance.Converters;
+namespace eFinance.Converters;
 
 public class AmountColorConverter : IValueConverter
 {
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is decimal amount)
             return amount < 0 ? Colors.Red : Colors.Black;
@@ -19,5 +19,7 @@ public class AmountColorConverter : IValueConverter
         if (amount > 0) return Colors.Green;
         return Colors.Black;
     }
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
+    
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) 
+        => throw new NotImplementedException();
 }

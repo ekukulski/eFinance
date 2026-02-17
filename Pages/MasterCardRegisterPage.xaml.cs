@@ -1,5 +1,4 @@
-using KukiFinance.Models;
-using KukiFinance.Services;
+using eFinance.Services;
 using Microsoft.Maui.Controls;
 using System.IO;
 using System.Linq;
@@ -7,18 +6,19 @@ using System.Collections.Generic;
 using System;
 using System.Globalization;
 using CsvHelper;
-using KukiFinance.Constants;
-using KukiFinance.Helpers;
+using eFinance.Constants;
+using eFinance.Helpers;
+using eFinance.Models;
 
-namespace KukiFinance.Pages
+namespace eFinance.Pages
 {
     public partial class MasterCardRegisterPage : ContentPage
     {
         // File paths and opening balance
-        private readonly string registerFile = FilePathHelper.GetKukiFinancePath("MasterCard.csv");
-        private readonly string transactionsFile = FilePathHelper.GetKukiFinancePath("transactionsMasterCard.csv");
-        private readonly string categoryFile = FilePathHelper.GetKukiFinancePath("Category.csv");
-        private readonly string currentFile = FilePathHelper.GetKukiFinancePath("MasterCardCurrent.csv");
+        private readonly string registerFile = FilePathHelper.GeteFinancePath("MasterCard.csv");
+        private readonly string transactionsFile = FilePathHelper.GeteFinancePath("transactionsMasterCard.csv");
+        private readonly string categoryFile = FilePathHelper.GeteFinancePath("Category.csv");
+        private readonly string currentFile = FilePathHelper.GeteFinancePath("MasterCardCurrent.csv");
         private readonly decimal openingBalance = OpeningBalances.Get("MasterCard");
         private readonly DateTime? openingBalanceDate = OpeningBalances.GetDate("MasterCard");
 
@@ -197,11 +197,11 @@ namespace KukiFinance.Pages
         {
             if (RegisterCollectionView.SelectedItem is RegistryEntry selectedEntry)
             {
-                string originalDescription = selectedEntry.Description;
+                string originalDescription = selectedEntry.Description ?? string.Empty;
                 DateTime originalDate = selectedEntry.Date ?? DateTime.MinValue;
                 decimal originalAmount = selectedEntry.Amount ?? 0m;
 
-                string newDescription = await DisplayPromptAsync("Edit Description", "Enter new description:", initialValue: selectedEntry.Description);
+                string? newDescription = await DisplayPromptAsync("Edit Description", "Enter new description:", initialValue: selectedEntry.Description);
                 if (string.IsNullOrWhiteSpace(newDescription) || newDescription == selectedEntry.Description)
                     return;
 
@@ -300,7 +300,7 @@ namespace KukiFinance.Pages
 
                     if (date.Date == (entry.Date ?? DateTime.MinValue).Date &&
                         amount == (entry.Amount ?? 0m) &&
-                        parts[2].Trim() == entry.Description)
+                        parts[2].Trim() == (entry.Description ?? ""))
                     {
                         allLines.RemoveAt(i);
                         break;

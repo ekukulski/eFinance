@@ -2,18 +2,18 @@ using Microsoft.Maui.Controls;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using KukiFinance.Services;
+using eFinance.Services;
 
-namespace KukiFinance.Pages
+namespace eFinance.Pages
 {
     public partial class CheckNumberPage : ContentPage
     {
-        private readonly string checkNumberFile = FilePathHelper.GetKukiFinancePath("CheckNumber.csv");
+        private readonly string checkNumberFile = FilePathHelper.GeteFinancePath("CheckNumber.csv");
 
         public ObservableCollection<CheckNumberEntry> Entries { get; set; } = new();
         public ObservableCollection<CheckNumberEntry> FilteredEntries { get; set; } = new();
 
-        private string _searchText;
+        private string _searchText = string.Empty;
         public string SearchText
         {
             get => _searchText;
@@ -72,8 +72,8 @@ namespace KukiFinance.Pages
 
         public class CheckNumberEntry
         {
-            public string CheckNumber { get; set; }
-            public string Description { get; set; }
+            public required string CheckNumber { get; set; }
+            public required string Description { get; set; }
         }
 
         private async void AddCheckNumberButton_Clicked(object sender, EventArgs e)

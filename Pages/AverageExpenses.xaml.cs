@@ -1,11 +1,11 @@
 using System.IO;
 using System.Text;
-using KukiFinance.Converters;
-using KukiFinance.Models;
-using KukiFinance.Services;
-using KukiFinance.ViewModels;
+using eFinance.Converters;
+using eFinance.Models;
+using eFinance.Services;
+using eFinance.ViewModels;
 
-namespace KukiFinance.Pages;
+namespace eFinance.Pages;
 public partial class AverageExpenses : ContentPage
 {
     private AverageExpenseViewModel _viewModel;
@@ -52,7 +52,7 @@ public partial class AverageExpenses : ContentPage
         if (_viewModel.CategoryAverages.Count == 0)
             return;
 
-        var filePath = FilePathHelper.GetKukiFinancePath("AverageExpenses.csv");
+        var filePath = FilePathHelper.GeteFinancePath("AverageExpenses.csv");
 
         var sb = new StringBuilder();
         sb.AppendLine("Category,Frequency,AverageExpense");

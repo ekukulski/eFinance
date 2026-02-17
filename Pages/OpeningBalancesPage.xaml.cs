@@ -2,15 +2,15 @@ using Microsoft.Maui.Controls;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using KukiFinance.Constants;
-using KukiFinance.Pages;
-using KukiFinance.Services;
+using eFinance.Constants;
+using eFinance.Pages;
+using eFinance.Services;
 
-namespace KukiFinance.Pages
+namespace eFinance.Pages
 {
     public partial class OpeningBalancesPage : ContentPage
     {
-        private static readonly string CsvPath = FilePathHelper.GetKukiFinancePath("OpeningBalances.csv");
+        private static readonly string CsvPath = FilePathHelper.GeteFinancePath("OpeningBalances.csv");
         public ObservableCollection<OpeningBalanceItem> Balances { get; set; } = new();
 
         public OpeningBalancesPage()
@@ -41,10 +41,16 @@ namespace KukiFinance.Pages
             else
             {
                 // If file doesn't exist, create from OpeningBalances.cs (pseudo-code, adapt as needed)
-                foreach (var prop in typeof(KukiFinance.Constants.OpeningBalances).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
+                foreach (var prop in typeof(eFinance.Constants.OpeningBalances).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
                 {
                     if (prop.FieldType == typeof(decimal))
-                        Balances.Add(new OpeningBalanceItem { Account = prop.Name, Balance = (decimal)prop.GetValue(null) });
+                    {
+                        var value = prop.GetValue(null);
+                        if (value != null)
+                        {
+                            Balances.Add(new OpeningBalanceItem { Account = prop.Name, Balance = (decimal)value });
+                        }
+                    }
                 }
                 SaveBalances();
             }
@@ -94,7 +100,7 @@ namespace KukiFinance.Pages
     public class OpeningBalanceItem
     {
         public DateTime Date { get; set; }
-        public string Account { get; set; }
+        public required string Account { get; set; }
         public decimal Balance { get; set; }
     }
 }

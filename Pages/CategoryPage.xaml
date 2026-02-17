@@ -1,6 +1,6 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             x:Class="KukiFinance.Pages.CategoryPage"
+             x:Class="eFinance.Pages.CategoryPage"
              Title="Category">
     <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" Padding="20">
         <HorizontalStackLayout Grid.Row="1" Spacing="16">

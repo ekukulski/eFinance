@@ -3,10 +3,10 @@ using System.Globalization;
 using CsvHelper;
 using CsvHelper.Configuration;
 using CommunityToolkit.Mvvm.ComponentModel;
-using KukiFinance.Helpers;
+using eFinance.Helpers;
 using System.IO;
 
-namespace KukiFinance.ViewModels;
+namespace eFinance.ViewModels;
 
 public sealed class CashFlowProjection
 {
@@ -83,8 +83,8 @@ public partial class CashFlowViewModel : ObservableObject
 
         try
         {
-            string bmoFile = FilePathHelper.GetKukiFinancePath("BMOCheckCurrent.csv");
-            string forecastFile = FilePathHelper.GetKukiFinancePath("ForecastExpenses.csv");
+            string bmoFile = FilePathHelper.GeteFinancePath("BMOCheckCurrent.csv");
+            string forecastFile = FilePathHelper.GeteFinancePath("ForecastExpenses.csv");
 
             DateTime today = DateTime.Today;
             DateTime firstOfThisMonth = new(today.Year, today.Month, 1);
@@ -147,7 +147,7 @@ public partial class CashFlowViewModel : ObservableObject
 
         try
         {
-            string forecastFile = FilePathHelper.GetKukiFinancePath("ForecastExpenses.csv");
+            string forecastFile = FilePathHelper.GeteFinancePath("ForecastExpenses.csv");
 
             var forecastItems = ReadForecastItems(forecastFile);
 

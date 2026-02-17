@@ -2,13 +2,13 @@ using Microsoft.Maui.Controls;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using KukiFinance.Services;
+using eFinance.Services;
 
-namespace KukiFinance.Pages
+namespace eFinance.Pages
 {
     public partial class CategoryListPage : ContentPage
     {
-        private readonly string categoryListFile = FilePathHelper.GetKukiFinancePath("CategoryList.csv");
+        private readonly string categoryListFile = FilePathHelper.GeteFinancePath("CategoryList.csv");
 
         // Holds all categories loaded from file
         private ObservableCollection<string> categories = new();
@@ -16,7 +16,7 @@ namespace KukiFinance.Pages
         // Holds filtered categories for display
         public ObservableCollection<string> FilteredCategories { get; set; } = new();
 
-        private string _searchText;
+        private string _searchText = string.Empty;
         public string SearchText
         {
             get => _searchText;

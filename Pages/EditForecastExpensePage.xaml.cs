@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Microsoft.Maui.Controls;
-using KukiFinance.Converters;
+using eFinance.Converters;
 
-namespace KukiFinance.Pages
+namespace eFinance.Pages
 {
     public partial class EditForecastExpensePage : ContentPage
     {

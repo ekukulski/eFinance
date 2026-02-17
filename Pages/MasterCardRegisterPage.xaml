@@ -1,8 +1,8 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:converters="clr-namespace:KukiFinance.Converters"
-             xmlns:pages="clr-namespace:KukiFinance.Pages"
-             x:Class="KukiFinance.Pages.MasterCardRegisterPage"
+             xmlns:converters="clr-namespace:eFinance.Converters"
+             xmlns:pages="clr-namespace:eFinance.Pages"
+             x:Class="eFinance.Pages.MasterCardRegisterPage"
              Title="MasterCard Register">
 
     <ContentPage.Resources>

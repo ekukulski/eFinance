@@ -1,20 +1,20 @@
-using KukiFinance.Models;
-using KukiFinance.Services;
+using eFinance.Services;
 using Microsoft.Maui.Controls;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using System;
-using KukiFinance.Constants;
-using KukiFinance.Helpers;
+using eFinance.Constants;
+using eFinance.Helpers;
+using eFinance.Models;
 
-namespace KukiFinance.Pages
+namespace eFinance.Pages
 {
     public partial class MidlandRegisterPage : ContentPage
     {
-        private readonly string registerFile = FilePathHelper.GetKukiFinancePath("Midland.csv");
-        private readonly string currentFile = FilePathHelper.GetKukiFinancePath("MidlandCurrent.csv");
-        private readonly string categoryFile = FilePathHelper.GetKukiFinancePath("Category.csv");
+        private readonly string registerFile = FilePathHelper.GeteFinancePath("Midland.csv");
+        private readonly string currentFile = FilePathHelper.GeteFinancePath("MidlandCurrent.csv");
+        private readonly string categoryFile = FilePathHelper.GeteFinancePath("Category.csv");
         private readonly decimal openingBalance = OpeningBalances.Get("Midland");
         private readonly DateTime? openingBalanceDate = OpeningBalances.GetDate("Midland");
 

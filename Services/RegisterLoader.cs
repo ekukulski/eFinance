@@ -1,6 +1,6 @@
 ﻿using System.IO;
 
-namespace KukiFinance.Services;
+namespace eFinance.Services;
 
 public static class RegisterLoader
 {

@@ -1,6 +1,6 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             x:Class="KukiFinance.Pages.EditForecastExpensePage"
+             x:Class="eFinance.Pages.EditForecastExpensePage"
              Title="Edit Forecast Expense">
     <VerticalStackLayout Padding="20" Spacing="16">
         <Label Text="Edit Forecast Expense"

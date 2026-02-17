@@ -1,11 +1,11 @@
 using System.Globalization;
 using Microsoft.Maui.Controls;
 
-namespace KukiFinance.Converters;
+namespace eFinance.Converters;
 
 public class AmountFormatConverter : IValueConverter
 {
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is decimal amount)
             return amount < 0 ? $"(${Math.Abs(amount):N2})" : $"${amount:N2}";
@@ -18,5 +18,7 @@ public class AmountFormatConverter : IValueConverter
         if (amount < 0) return $"(${Math.Abs(amount):N2})";
         return $"${amount:N2}";
     }
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
+    
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) 
+        => throw new NotImplementedException();
 }

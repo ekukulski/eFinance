@@ -1,7 +1,7 @@
-﻿using KukiFinance.Pages;
-using KukiFinance.Services;
+﻿using eFinance.Pages;
+using eFinance.Services;
 
-namespace KukiFinance;
+namespace eFinance;
 
 public partial class AppShell : Shell
 {

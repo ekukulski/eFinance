@@ -1,9 +1,9 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using KukiFinance.Pages;
-using KukiFinance.Services;
+using eFinance.Pages;
+using eFinance.Services;
 
-namespace KukiFinance.ViewModels;
+namespace eFinance.ViewModels;
 
 public partial class MainPageViewModel : ObservableObject
 {

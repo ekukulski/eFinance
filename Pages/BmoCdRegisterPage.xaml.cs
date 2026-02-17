@@ -1,6 +1,5 @@
-using KukiFinance.Models;
-using KukiFinance.Services;
-using KukiFinance.Helpers;
+using eFinance.Services;
+using eFinance.Helpers;
 using Microsoft.Maui.Controls;
 using System.IO;
 using System.Linq;
@@ -8,16 +7,17 @@ using System.Collections.Generic;
 using System;
 using System.Globalization;
 using CsvHelper;
-using KukiFinance.Constants;
+using eFinance.Constants;
+using eFinance.Models;
 
-namespace KukiFinance.Pages
+namespace eFinance.Pages
 {
     public partial class BmoCdRegisterPage : ContentPage
     {
-        private readonly string registerFile = FilePathHelper.GetKukiFinancePath("BMOCD.csv");
-        private readonly string currentFile = FilePathHelper.GetKukiFinancePath("BMOCDCurrent.csv");
-        private readonly string transactionsFile = FilePathHelper.GetKukiFinancePath("transactionsCD.csv");
-        private readonly string categoryFile = FilePathHelper.GetKukiFinancePath("Category.csv");
+        private readonly string registerFile = FilePathHelper.GeteFinancePath("BMOCD.csv");
+        private readonly string currentFile = FilePathHelper.GeteFinancePath("BMOCDCurrent.csv");
+        private readonly string transactionsFile = FilePathHelper.GeteFinancePath("transactionsCD.csv");
+        private readonly string categoryFile = FilePathHelper.GeteFinancePath("Category.csv");
         private readonly decimal openingBalance = OpeningBalances.Get("BmoCd");
 
         private readonly RegisterViewModel viewModel = new();

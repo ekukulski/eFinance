@@ -4,9 +4,9 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using CsvHelper;
-using KukiFinance.Models;
+using eFinance.Models;
 
-namespace KukiFinance.Helpers
+namespace eFinance.Helpers
 {
     public static class RegisterExporter
     {
@@ -53,12 +53,12 @@ namespace KukiFinance.Helpers
             }
         }
 
-    public class DisplayRegisterRow
+        public class DisplayRegisterRow
         {
-            public string Date { get; set; }
-            public string Description { get; set; }
-            public string Category { get; set; }
-            public string CheckNumber { get; set; } // Only used for BMO Check
+            public required string Date { get; set; }
+            public required string Description { get; set; }
+            public required string Category { get; set; }
+            public required string CheckNumber { get; set; }
             public decimal Amount { get; set; }
             public decimal Balance { get; set; }
         }

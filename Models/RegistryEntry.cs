@@ -1,6 +1,6 @@
 using System;
 
-namespace KukiFinance.Models;
+namespace eFinance.Models;
 
 public class RegistryEntry
 {
@@ -38,4 +38,7 @@ public class RegistryEntry
 
     // Calculated in code, not mapped to CSV
     public decimal Balance { get; set; }
+
+    public long? TransactionId { get; set; }
+
 }

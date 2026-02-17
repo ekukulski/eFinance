@@ -1,5 +1,4 @@
-using KukiFinance.Models;
-using KukiFinance.Services;
+using eFinance.Services;
 using Microsoft.Maui.Controls;
 using System.IO;
 using System.Linq;
@@ -7,16 +6,17 @@ using System.Collections.Generic;
 using System;
 using System.Globalization;
 using CsvHelper;
-using KukiFinance.Constants;
-using KukiFinance.Helpers;
+using eFinance.Constants;
+using eFinance.Helpers;
+using eFinance.Models;
 
-namespace KukiFinance.Pages
+namespace eFinance.Pages
 {
     public partial class CashRegisterPage : ContentPage
     {
-        private readonly string registerFile = FilePathHelper.GetKukiFinancePath("Cash.csv");
-        private readonly string cashCurrentFile = FilePathHelper.GetKukiFinancePath("CashCurrent.csv");
-        private readonly string categoryFile = FilePathHelper.GetKukiFinancePath("Category.csv");
+        private readonly string registerFile = FilePathHelper.GeteFinancePath("Cash.csv");
+        private readonly string cashCurrentFile = FilePathHelper.GeteFinancePath("CashCurrent.csv");
+        private readonly string categoryFile = FilePathHelper.GeteFinancePath("Category.csv");
         private readonly decimal openingBalance = OpeningBalances.Get("Cash");
         private readonly DateTime? openingBalanceDate = OpeningBalances.GetDate("Cash");
 

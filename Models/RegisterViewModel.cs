@@ -1,13 +1,13 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
-using KukiFinance.ViewModels;
+using eFinance.ViewModels;
 
-namespace KukiFinance.Models
+namespace eFinance.Models
 {
     public class RegisterViewModel : RegisterViewModelBase<RegistryEntry>
     {
-        private string _searchText;
+        private string _searchText = string.Empty;
         public string SearchText
         {
             get => _searchText;
@@ -35,18 +35,18 @@ namespace KukiFinance.Models
             var query = string.IsNullOrWhiteSpace(SearchText)
                 ? Entries
                 : Entries.Where(e =>
-                    (e.Date.HasValue && e.Date.Value.ToString("yyyy-MM-dd").Contains(SearchText, StringComparison.OrdinalIgnoreCase)) ||
+                    e.Date.HasValue && e.Date.Value.ToString("yyyy-MM-dd").Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
                     (e.Description?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
                     (e.Category?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
                     (e.CheckNumber?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
                     (e.Amount?.ToString().Contains(SearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                    (e.Balance.ToString().Contains(SearchText, StringComparison.OrdinalIgnoreCase))
+                    e.Balance.ToString().Contains(SearchText, StringComparison.OrdinalIgnoreCase)
                 );
             foreach (var entry in query)
                 FilteredEntries.Add(entry);
         }
 
-        protected override object GetPropertyValue(RegistryEntry entry, string propertyName)
+        protected override object? GetPropertyValue(RegistryEntry entry, string propertyName)
         {
             return propertyName switch
             {

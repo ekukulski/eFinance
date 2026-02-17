@@ -1,20 +1,20 @@
-using KukiFinance.Models;
-using KukiFinance.Services;
+using eFinance.Services;
 using Microsoft.Maui.Controls;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using System;
-using KukiFinance.Constants;
-using KukiFinance.Helpers;
+using eFinance.Constants;
+using eFinance.Helpers;
+using eFinance.Models;
 
-namespace KukiFinance.Pages
+namespace eFinance.Pages
 {
     public partial class NetXRegisterPage : ContentPage
     {
-        private readonly string registerFile = FilePathHelper.GetKukiFinancePath("NetX.csv");
-        private readonly string currentFile = FilePathHelper.GetKukiFinancePath("NetXCurrent.csv");
-        private readonly string categoryFile = FilePathHelper.GetKukiFinancePath("Category.csv");
+        private readonly string registerFile = FilePathHelper.GeteFinancePath("NetX.csv");
+        private readonly string currentFile = FilePathHelper.GeteFinancePath("NetXCurrent.csv");
+        private readonly string categoryFile = FilePathHelper.GeteFinancePath("Category.csv");
         private readonly decimal openingBalance = OpeningBalances.Get("NetX");
 
         private readonly RegisterViewModel viewModel = new();
@@ -94,7 +94,7 @@ namespace KukiFinance.Pages
 
         private List<(string Security, decimal Amount)> ReadSecurities()
         {
-            var path = FilePathHelper.GetKukiFinancePath("NetXSecurities.csv");
+            var path = FilePathHelper.GeteFinancePath("NetXSecurities.csv");
             var result = new List<(string, decimal)>();
             if (!File.Exists(path)) return result;
             foreach (var line in File.ReadAllLines(path).Skip(1))
@@ -152,7 +152,7 @@ namespace KukiFinance.Pages
             // Optionally, update NetXSecurities.csv with edits
             var lines = new List<string> { "Security,Amount" };
             lines.AddRange(finalSecurities.Select(s => $"{s.Security},{s.Amount}"));
-            File.WriteAllLines(FilePathHelper.GetKukiFinancePath("NetXSecurities.csv"), lines);
+            File.WriteAllLines(FilePathHelper.GeteFinancePath("NetXSecurities.csv"), lines);
 
             LoadRegister();
             await DisplayAlert("Success", $"Manual transaction added. Amount: {transactionAmount:C}", "OK");

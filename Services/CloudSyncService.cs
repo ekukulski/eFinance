@@ -3,19 +3,19 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Threading.Tasks;
-using KukiFinance.Helpers;
+using eFinance.Helpers;
 using Microsoft.Maui.Storage;
 
-namespace KukiFinance.Services
+namespace eFinance.Services
 {
-    public sealed class OneDriveSyncService : IOneDriveSyncService
+    public sealed class CloudSyncService : ICloudSyncService
     {
-        private const string AppFolderName = "KukiFinance";
+        private const string AppFolderName = "eFinance";
         private const string LatestPointerFileName = "LATEST.txt";
 
         /// <summary>
         /// IMPORTANT: Use the same local folder your pages read from.
-        /// ExpensePage loads CSVs via FilePathHelper.GetKukiFinancePath("MidlandCurrent.csv"), etc.
+        /// ExpensePage loads CSVs via FilePathHelper.GeteFinancePath("MidlandCurrent.csv"), etc.
         /// So we derive the directory from that helper.
         /// </summary>
         private static string LocalDataDir
@@ -23,7 +23,7 @@ namespace KukiFinance.Services
             get
             {
                 // Pick any known file name from your list; we only need the directory.
-                var samplePath = FilePathHelper.GetKukiFinancePath("MidlandCurrent.csv");
+                var samplePath = FilePathHelper.GeteFinancePath("MidlandCurrent.csv");
                 return Path.GetDirectoryName(samplePath) ?? FileSystem.AppDataDirectory;
             }
         }
@@ -31,20 +31,20 @@ namespace KukiFinance.Services
         private static string LocalBackupsDir => Path.Combine(LocalDataDir, "Backups");
 
 #if WINDOWS
-        private static bool TryGetOneDriveBaseDir(bool createIfMissing, out string baseDir, out string message)
+        private static bool TryGetCloudSyncBaseDir(bool createIfMissing, out string baseDir, out string message)
         {
             baseDir = string.Empty;
             message = string.Empty;
 
             try
             {
-                baseDir = OneDrivePathHelper.GetOneDriveKukiFinanceDirectory(createIfMissing: createIfMissing);
+                baseDir = CloudSyncPathHelper.GetCloudSynceFinanceDirectory(createIfMissing: createIfMissing);
 
                 if (string.IsNullOrWhiteSpace(baseDir) || !Directory.Exists(baseDir))
                 {
                     message =
-                        "OneDrive folder not found on this PC.\n\n" +
-                        "Please sign into OneDrive (or ensure it is installed and syncing), then try again.\n\n" +
+                        "Proton Drive folder not found on this PC.\n\n" +
+                        "Please make sure Proton Drive is installed and syncing, then try again.\n\n" +
                         "You can still use the app locally.";
                     return false;
                 }
@@ -53,7 +53,7 @@ namespace KukiFinance.Services
             }
             catch (Exception ex)
             {
-                message = "Unable to determine OneDrive availability: " + ex.Message;
+                message = "Unable to determine Proton Drive availability: " + ex.Message;
                 return false;
             }
         }
@@ -164,16 +164,16 @@ namespace KukiFinance.Services
         }
 #endif
 
-        public async Task<(bool ok, string message, string? snapshotName)> ExportToOneDriveAsync()
+        public async Task<(bool ok, string message, string? snapshotName)> ExportToCloudAsync()
         {
 #if !WINDOWS
-            return (false, "OneDrive export is currently supported on Windows only.", null);
+            return (false, "Cloud sync export is currently supported on Windows only.", null);
 #else
             try
             {
-                // ✅ OneDrive availability guard
-                if (!TryGetOneDriveBaseDir(createIfMissing: true, out var baseDir, out var odMsg))
-                    return (false, odMsg, null);
+                // ✅ Proton Drive availability guard
+                if (!TryGetCloudSyncBaseDir(createIfMissing: true, out var baseDir, out var cloudMsg))
+                    return (false, cloudMsg, null);
 
                 var exportsDir = ExportsDir(baseDir);
                 var archiveDir = ArchiveDir(baseDir);
@@ -222,8 +222,8 @@ namespace KukiFinance.Services
                 await File.WriteAllTextAsync(latestPath, finalName);
 
                 var msg =
-                    $"Exported {localFiles.Length} file(s) to OneDrive:\n{finalPath}\n\n" +
-                    "If importing on another PC, wait for OneDrive to finish syncing (OneDrive icon shows 'Up to date').";
+                    $"Exported {localFiles.Length} file(s) to Proton Drive:\n{finalPath}\n\n" +
+                    "If importing on another PC, wait for Proton Drive to finish syncing.";
 
                 return (true, msg, finalName);
             }
@@ -234,16 +234,16 @@ namespace KukiFinance.Services
 #endif
         }
 
-        public async Task<(bool ok, string message, string? snapshotName)> ImportFromOneDriveAsync()
+        public async Task<(bool ok, string message, string? snapshotName)> ImportFromCloudAsync()
         {
 #if !WINDOWS
-            return (false, "OneDrive import is currently supported on Windows only.", null);
+            return (false, "Cloud sync import is currently supported on Windows only.", null);
 #else
             try
             {
-                // ✅ OneDrive availability guard
-                if (!TryGetOneDriveBaseDir(createIfMissing: false, out var baseDir, out var odMsg))
-                    return (false, odMsg, null);
+                // ✅ Proton Drive availability guard
+                if (!TryGetCloudSyncBaseDir(createIfMissing: false, out var baseDir, out var cloudMsg))
+                    return (false, cloudMsg, null);
 
                 var exportsDir = ExportsDir(baseDir);
                 var archiveDir = ArchiveDir(baseDir);
@@ -255,12 +255,12 @@ namespace KukiFinance.Services
 
                 var (zipPath, readyPath, chosenName) = FindLatestExport(exportsDir);
                 if (zipPath is null || readyPath is null || chosenName is null)
-                    return (false, $"No OneDrive exports found. Expected files in:\n{exportsDir}", null);
+                    return (false, $"No Proton Drive exports found. Expected files in:\n{exportsDir}", null);
 
-                // Wait-until-safe loop (handles OneDrive sync delays)
+                // Wait-until-safe loop (handles Proton Drive sync delays)
                 var stable = await WaitUntilStableAsync(zipPath, readyPath, timeoutSeconds: 60);
                 if (!stable)
-                    return (false, "The latest export hasn't finished syncing yet. Please wait for OneDrive to be 'Up to date' and try again.", chosenName);
+                    return (false, "The latest export hasn't finished syncing yet. Please wait for Proton Drive to sync and try again.", chosenName);
 
                 // Backup current local CSVs first (zip)
                 var localFiles = GetLocalCsvFiles();
@@ -302,7 +302,7 @@ namespace KukiFinance.Services
                 Directory.Delete(importTempDir, recursive: true);
 
                 var msg =
-                    $"Imported {extracted.Length} file(s) from OneDrive snapshot:\n{zipPath}\n\n" +
+                    $"Imported {extracted.Length} file(s) from Proton Drive snapshot:\n{zipPath}\n\n" +
                     $"Local data folder:\n{LocalDataDir}\n\n" +
                     "Tip: If you already have a register/summary page open, navigate back and reopen it to reload the files.";
 
@@ -318,30 +318,30 @@ namespace KukiFinance.Services
         public async Task<(bool ok, string? snapshotName, DateTime? snapshotWriteUtc, string message)> GetLatestSnapshotInfoAsync()
         {
 #if !WINDOWS
-            return (false, null, null, "OneDrive sync is currently supported on Windows only.");
+            return (false, null, null, "Cloud sync is currently supported on Windows only.");
 #else
             try
             {
-                // ✅ OneDrive availability guard
-                if (!TryGetOneDriveBaseDir(createIfMissing: false, out var baseDir, out var odMsg))
-                    return (false, null, null, odMsg);
+                // ✅ Proton Drive availability guard
+                if (!TryGetCloudSyncBaseDir(createIfMissing: false, out var baseDir, out var cloudMsg))
+                    return (false, null, null, cloudMsg);
 
                 var exportsDir = ExportsDir(baseDir);
                 Directory.CreateDirectory(exportsDir);
 
                 var (zipPath, readyPath, chosenName) = FindLatestExport(exportsDir);
                 if (zipPath is null || readyPath is null || chosenName is null)
-                    return (false, null, null, $"No OneDrive exports found in:\n{exportsDir}");
+                    return (false, null, null, $"No Proton Drive exports found in:\n{exportsDir}");
 
                 if (!File.Exists(zipPath))
-                    return (false, chosenName, null, "Latest snapshot is referenced but not present locally yet (OneDrive still syncing).");
+                    return (false, chosenName, null, "Latest snapshot is referenced but not present locally yet (Proton Drive still syncing).");
 
                 var writeUtc = File.GetLastWriteTimeUtc(zipPath);
                 return (true, chosenName, writeUtc, "OK");
             }
             catch (Exception ex)
             {
-                return (false, null, null, $"Failed to read OneDrive snapshot info: {ex.Message}");
+                return (false, null, null, $"Failed to read Proton Drive snapshot info: {ex.Message}");
             }
 #endif
         }

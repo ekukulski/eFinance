@@ -1,20 +1,20 @@
-using KukiFinance.Models;
-using KukiFinance.Services;
+using eFinance.Services;
 using Microsoft.Maui.Controls;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using System;
-using KukiFinance.Constants;
-using KukiFinance.Helpers;
+using eFinance.Constants;
+using eFinance.Helpers;
+using eFinance.Models;
 
-namespace KukiFinance.Pages
+namespace eFinance.Pages
 {
     public partial class CharlesSchwabRothIraPattiRegisterPage : ContentPage
     {
-        private readonly string registerFile = FilePathHelper.GetKukiFinancePath("CharlesSchwabRothIraPatti.csv");
-        private readonly string currentFile = FilePathHelper.GetKukiFinancePath("CharlesSchwabRothIraPattiCurrent.csv");
-        private readonly string categoryFile = FilePathHelper.GetKukiFinancePath("Category.csv");
+        private readonly string registerFile = FilePathHelper.GeteFinancePath("CharlesSchwabRothIraPatti.csv");
+        private readonly string currentFile = FilePathHelper.GeteFinancePath("CharlesSchwabRothIraPattiCurrent.csv");
+        private readonly string categoryFile = FilePathHelper.GeteFinancePath("Category.csv");
         private readonly decimal openingBalance = OpeningBalances.Get("CharlesSchwabRothIraPatti");
 
         private readonly RegisterViewModel viewModel = new();

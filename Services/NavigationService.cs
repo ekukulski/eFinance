@@ -1,4 +1,4 @@
-﻿namespace KukiFinance.Services;
+﻿namespace eFinance.Services;
 
 public interface INavigationService
 {

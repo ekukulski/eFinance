@@ -5,7 +5,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
-namespace KukiFinance.Models;
+namespace eFinance.Models;
 
 public abstract class RegisterViewModelBase<TEntry> : INotifyPropertyChanged
 {
@@ -20,7 +20,7 @@ public abstract class RegisterViewModelBase<TEntry> : INotifyPropertyChanged
 
     public ICommand SortCommand { get; }
 
-    private string _lastSortColumn;
+    private string _lastSortColumn = string.Empty;
     private bool _lastSortAscending = true;
 
     protected RegisterViewModelBase()
@@ -28,7 +28,7 @@ public abstract class RegisterViewModelBase<TEntry> : INotifyPropertyChanged
         SortCommand = new Command<string>(SortByColumn);
     }
 
-    private void SortByColumn(string column)
+    private void SortByColumn(string? column)
     {
         if (string.IsNullOrEmpty(column) || Entries.Count == 0)
             return;
@@ -47,10 +47,10 @@ public abstract class RegisterViewModelBase<TEntry> : INotifyPropertyChanged
         RecalculateBalance();
     }
 
-    protected abstract object GetPropertyValue(TEntry entry, string propertyName);
+    protected abstract object? GetPropertyValue(TEntry entry, string propertyName);
     protected abstract void RecalculateBalance();
 
-    public event PropertyChangedEventHandler PropertyChanged;
-    protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
+    public event PropertyChangedEventHandler? PropertyChanged;
+    protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 }

@@ -2,11 +2,11 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using CsvHelper;
-using KukiFinance.Models;
 using System.IO;
 using System.Linq;
+using eFinance.Models;
 
-namespace KukiFinance.ViewModels
+namespace eFinance.ViewModels
 {
     public class AverageExpenseViewModel : INotifyPropertyChanged
     {
@@ -29,25 +29,25 @@ namespace KukiFinance.ViewModels
 
         private static readonly string[] CsvFiles = new[]
         {
-            FilePathHelper.GetKukiFinancePath("MidlandCurrent.csv"),
-            FilePathHelper.GetKukiFinancePath("CharlesSchwabContributoryCurrent.csv"),
-            FilePathHelper.GetKukiFinancePath("CharlesSchwabJointTenantCurrent.csv"),
-            FilePathHelper.GetKukiFinancePath("CharlesSchwabRothIraEdCurrent.csv"),
-            FilePathHelper.GetKukiFinancePath("CharlesSchwabRothIraPattiCurrent.csv"),
-            FilePathHelper.GetKukiFinancePath("NetXCurrent.csv"),
-            FilePathHelper.GetKukiFinancePath("HealthProCurrent.csv"),
-            FilePathHelper.GetKukiFinancePath("Select401KCurrent.csv"),
-            FilePathHelper.GetKukiFinancePath("GoldCurrent.csv"),
-            FilePathHelper.GetKukiFinancePath("HouseCurrent.csv"),
-            FilePathHelper.GetKukiFinancePath("ChevroletImpalaCurrent.csv"),
-            FilePathHelper.GetKukiFinancePath("NissanSentraCurrent.csv"),
-            FilePathHelper.GetKukiFinancePath("CashCurrent.csv"),
-            FilePathHelper.GetKukiFinancePath("BMOCheckCurrent.csv"),
-            FilePathHelper.GetKukiFinancePath("BMOMoneyMarketCurrent.csv"),
-            FilePathHelper.GetKukiFinancePath("BMOCDCurrent.csv"),
-            FilePathHelper.GetKukiFinancePath("AMEXCurrent.csv"),
-            FilePathHelper.GetKukiFinancePath("VisaCurrent.csv"),
-            FilePathHelper.GetKukiFinancePath("MasterCardCurrent.csv")
+            FilePathHelper.GeteFinancePath("MidlandCurrent.csv"),
+            FilePathHelper.GeteFinancePath("CharlesSchwabContributoryCurrent.csv"),
+            FilePathHelper.GeteFinancePath("CharlesSchwabJointTenantCurrent.csv"),
+            FilePathHelper.GeteFinancePath("CharlesSchwabRothIraEdCurrent.csv"),
+            FilePathHelper.GeteFinancePath("CharlesSchwabRothIraPattiCurrent.csv"),
+            FilePathHelper.GeteFinancePath("NetXCurrent.csv"),
+            FilePathHelper.GeteFinancePath("HealthProCurrent.csv"),
+            FilePathHelper.GeteFinancePath("Select401KCurrent.csv"),
+            FilePathHelper.GeteFinancePath("GoldCurrent.csv"),
+            FilePathHelper.GeteFinancePath("HouseCurrent.csv"),
+            FilePathHelper.GeteFinancePath("ChevroletImpalaCurrent.csv"),
+            FilePathHelper.GeteFinancePath("NissanSentraCurrent.csv"),
+            FilePathHelper.GeteFinancePath("CashCurrent.csv"),
+            FilePathHelper.GeteFinancePath("BMOCheckCurrent.csv"),
+            FilePathHelper.GeteFinancePath("BMOMoneyMarketCurrent.csv"),
+            FilePathHelper.GeteFinancePath("BMOCDCurrent.csv"),
+            FilePathHelper.GeteFinancePath("AMEXCurrent.csv"),
+            FilePathHelper.GeteFinancePath("VisaCurrent.csv"),
+            FilePathHelper.GeteFinancePath("MasterCardCurrent.csv")
         };
 
         public AverageExpenseViewModel()
@@ -57,7 +57,7 @@ namespace KukiFinance.ViewModels
 
         private static HashSet<string> GetExcludedCategoriesFromCsv()
         {
-            var path = FilePathHelper.GetKukiFinancePath("ExcludedCategories.csv");
+            var path = FilePathHelper.GeteFinancePath("ExcludedCategories.csv");
             var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (!File.Exists(path)) return set;
             var lines = File.ReadAllLines(path);
@@ -88,10 +88,10 @@ namespace KukiFinance.ViewModels
                 var records = csv.GetRecords<dynamic>();
                 foreach (var record in records)
                 {
-                    string category = record.CATEGORY;
-                    string dateStr = record.DATE;
-                    string amountStr = record.AMOUNT;
-                    string description = record.DESCRIPTION;
+                    string? category = record.CATEGORY;
+                    string? dateStr = record.DATE;
+                    string? amountStr = record.AMOUNT;
+                    string? description = record.DESCRIPTION;
 
                     if (string.IsNullOrWhiteSpace(category) || excludedCategories.Contains(category))
                         continue;
@@ -109,8 +109,8 @@ namespace KukiFinance.ViewModels
 
                     AllExpenseRecords.Add(new ExpenseRecord
                     {
-                        Date = dateStr,
-                        Description = description,
+                        Date = dateStr ?? string.Empty,
+                        Description = description ?? string.Empty,
                         Category = category,
                         Amount = Math.Abs(amount)
                     });
@@ -129,22 +129,9 @@ namespace KukiFinance.ViewModels
                     Frequency = frequency
                 });
             }
-
-            /* foreach (var kvp in categoryTotals.OrderBy(kvp => kvp.Key))
-            {
-                var total = kvp.Value.Sum();
-                var frequency = kvp.Value.Count; // Number of times this category was expensed
-                var avgPerOccurrence = frequency > 0 ? total / frequency : 0m;
-                CategoryAverages.Add(new CategoryAverageExpense
-                {
-                    Category = kvp.Key,
-                    AverageExpense = avgPerOccurrence, // Average per expense occurrence
-                    Frequency = frequency
-                });
-            } */
         }
 
-        public void UpdateSelectedCategoryTotal(string category)
+        public void UpdateSelectedCategoryTotal(string? category)
         {
             var matching = AllExpenseRecords
                 .Where(r => string.Equals(r.Category?.Trim(), category?.Trim(), StringComparison.OrdinalIgnoreCase))
@@ -154,8 +141,8 @@ namespace KukiFinance.ViewModels
             SelectedCategoryTotal = total;
         }
 
-        public event PropertyChangedEventHandler PropertyChanged;
-        protected virtual void OnPropertyChanged(string propertyName) =>
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected virtual void OnPropertyChanged(string? propertyName) =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }

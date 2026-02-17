@@ -3,7 +3,7 @@ using System.Globalization;
 using Microsoft.Maui.Controls;
 using System.Collections;
 
-namespace KukiFinance.Converters
+namespace eFinance.Converters
 {
     public class AlternatingRowColorConverter : IMultiValueConverter
     {

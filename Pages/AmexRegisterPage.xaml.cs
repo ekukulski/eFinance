@@ -1,126 +1,167 @@
-using KukiFinance.Models;
-using KukiFinance.Services;
-using Microsoft.Maui.Controls;
-using System.IO;
-using System.Linq;
+﻿using System;
 using System.Collections.Generic;
-using System;
-using System.Globalization;
-using CsvHelper;
-using KukiFinance.Constants;
-using KukiFinance.Helpers;
+using System.Diagnostics;
+using System.Linq;
+using System.Threading.Tasks;
+using eFinance.Data;
+using eFinance.Data.Models;
+using eFinance.Data.Repositories;
+using eFinance.Models;
+using Microsoft.Data.Sqlite;
+using Microsoft.Maui.Controls;
 
-namespace KukiFinance.Pages
+namespace eFinance.Pages
 {
     public partial class AmexRegisterPage : ContentPage
     {
-        // File paths and opening balance
-        private readonly string registerFile = FilePathHelper.GetKukiFinancePath("AMEX.csv");
-        private readonly string currentFile = FilePathHelper.GetKukiFinancePath("AMEXCurrent.csv");
-        private readonly string transactionsFile = FilePathHelper.GetKukiFinancePath("transactionsAMEX.csv");
-        private readonly string categoryFile = FilePathHelper.GetKukiFinancePath("Category.csv");
-        private readonly decimal openingBalance = OpeningBalances.Get("Amex");
-        private readonly DateTime? openingBalanceDate = OpeningBalances.GetDate("Amex");
+        // Transactions table uses Accounts.Name = "AMEX"
+        private const string AccountNameInDb = "AMEX";
+
+        // OpeningBalances table uses AccountName like your CSV: "Amex"
+        private const string OpeningBalanceAccountName = "Amex";
+
+        private readonly SqliteDatabase _db;
+        private readonly AccountRepository _accounts;
+        private readonly TransactionRepository _transactions;
 
         private readonly RegisterViewModel viewModel = new();
 
-        public AmexRegisterPage()
+        public AmexRegisterPage(SqliteDatabase db, AccountRepository accounts, TransactionRepository transactions)
         {
             InitializeComponent();
+
+            _db = db ?? throw new ArgumentNullException(nameof(db));
+            _accounts = accounts ?? throw new ArgumentNullException(nameof(accounts));
+            _transactions = transactions ?? throw new ArgumentNullException(nameof(transactions));
+
             BindingContext = viewModel;
-            LoadRegister();
         }
 
-        protected override void OnAppearing()
+        protected override async void OnAppearing()
         {
             base.OnAppearing();
-            LoadRegister();
+            await LoadFromDbAsync();
         }
 
-        private void LoadRegister()
+        private async Task LoadFromDbAsync()
         {
-            if (!File.Exists(registerFile) || !File.Exists(categoryFile))
+            try
             {
-                viewModel.Entries.Clear();
-                viewModel.CurrentBalance = 0m;
-                return;
-            }
+                // Ensure schema + seed accounts (safe to call repeatedly)
+                await _db.InitializeAsync();
+                await _accounts.SeedDefaultsIfEmptyAsync();
 
-            var entries = RegisterService.LoadRegister<RegistryEntry>(
-                registerFile,
-                categoryFile,
-                openingBalance,
-                parts =>
+                var accountId = await _accounts.GetIdByNameAsync(AccountNameInDb);
+                if (accountId is null)
                 {
-                    // parts[0]: Date, parts[1]: Description, parts[2]: Amount
-                    return new RegistryEntry
-                    {
-                        Date = DateTime.TryParse(parts[0].Trim(), out var date) ? date : (DateTime?)null,
-                        Description = parts[1].Trim(),
-                        Amount = decimal.TryParse(parts[4].Trim(), out var amt) ? amt * -1 : 0
-                    };
-                },
-                entry => entry.Date ?? DateTime.MinValue,
-                entry => entry.Amount ?? 0,
-                entry => entry.Balance,
-                (entry, balance) => entry.Balance = balance,
-                new RegistryEntry
+                    viewModel.Entries.Clear();
+                    viewModel.CurrentBalance = 0m;
+                    viewModel.FilterEntries();
+
+                    await DisplayAlert("AMEX", $"Account '{AccountNameInDb}' not found in database.", "OK");
+                    return;
+                }
+
+                // ✅ Get opening balance from SQLite OpeningBalances table
+                var (openingDate, openingBalance) = await GetOpeningBalanceAsync(OpeningBalanceAccountName);
+
+                // Pull all AMEX transactions
+                var dbTx = await _transactions.GetByAccountAsync(accountId.Value);
+
+                var entries = new List<RegistryEntry>(capacity: dbTx.Count + 1);
+
+                // Opening row (from DB)
+                entries.Add(new RegistryEntry
                 {
-                    Date = openingBalanceDate ?? DateTime.Today.AddDays(-1),
+                    Date = openingDate.ToDateTime(TimeOnly.MinValue),
                     Description = "OPENING BALANCE",
                     Category = "Equity",
                     Amount = openingBalance,
                     Balance = openingBalance
+                });
+
+                // For running balance, use chronological order
+                foreach (var t in dbTx.OrderBy(x => x.PostedDate).ThenBy(x => x.Id))
+                {
+                    entries.Add(new RegistryEntry
+                    {
+                        Date = t.PostedDate.ToDateTime(TimeOnly.MinValue),
+                        Description = t.Description,
+                        Category = t.Category ?? "",
+                        Amount = t.Amount,
+                        Balance = 0m
+                    });
                 }
-            );
 
-            // Set categories from category file
-            var categoryMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var parts in File.ReadAllLines(categoryFile).Skip(1).Select(line => line.Split(',')).Where(parts => parts.Length >= 2))
-            {
-                var key = parts[0].Trim();
-                var value = parts[1].Trim();
-                if (!string.IsNullOrEmpty(key) && !categoryMap.ContainsKey(key))
-                    categoryMap[key] = value;
+                // Running balance
+                decimal running = openingBalance;
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    if (i == 0)
+                    {
+                        entries[i].Balance = openingBalance;
+                        continue;
+                    }
+
+                    running += entries[i].Amount ?? 0m;
+                    entries[i].Balance = running;
+                }
+
+                // Load into VM
+                viewModel.Entries.Clear();
+                foreach (var e in entries)
+                    viewModel.Entries.Add(e);
+
+                viewModel.CurrentBalance = viewModel.Entries.LastOrDefault()?.Balance ?? 0m;
+                viewModel.FilterEntries();
+
+                Debug.WriteLine($"AMEX register loaded: {dbTx.Count} tx. Opening={openingBalance} on {openingDate:yyyy-MM-dd}. Balance={viewModel.CurrentBalance}");
             }
-
-            viewModel.Entries.Clear();
-            foreach (var entry in entries)
+            catch (Exception ex)
             {
-                entry.Category = categoryMap.TryGetValue(entry.Description ?? "", out var cat) ? cat : "";
-                viewModel.Entries.Add(entry);
+                Debug.WriteLine($"AMEX LoadFromDbAsync FAILED: {ex}");
+                await DisplayAlert("Error", $"Failed to load AMEX register: {ex.Message}", "OK");
             }
-            viewModel.CurrentBalance = viewModel.Entries.LastOrDefault()?.Balance ?? 0m;
-
-            // Export the current, display-ready register to CashCurrent.csv using the in-memory list
-            RegisterExporter.ExportRegisterWithBalance(
-                viewModel.Entries.ToList(),
-                currentFile,
-                includeCheckNumber: false
-            );
-            viewModel.FilterEntries();
         }
+
+        /// <summary>
+        /// Reads opening balance for a logical account name (e.g. 'Amex') from OpeningBalances table.
+        /// If not found, returns (today, 0).
+        /// </summary>
+        private async Task<(DateOnly Date, decimal Balance)> GetOpeningBalanceAsync(string openingAccountName)
+        {
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            cmd.CommandText = @"
+SELECT BalanceDate, Balance
+FROM OpeningBalances
+WHERE LOWER(AccountName) = LOWER($name)
+LIMIT 1;
+";
+            cmd.Parameters.AddWithValue("$name", openingAccountName.Trim());
+
+            using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync())
+            {
+                var date = DateOnly.Parse(r.GetString(0));
+                var bal = (decimal)r.GetDouble(1);
+                return (date, bal);
+            }
+
+            // Not found -> fallback
+            return (DateOnly.FromDateTime(DateTime.Today), 0m);
+        }
+
+        // ------------------------------
+        // BUTTON HANDLERS
+        // ------------------------------
 
         private async void AddTransactionsButton_Clicked(object sender, EventArgs e)
         {
-            if (!File.Exists(transactionsFile))
-            {
-                await DisplayAlert("Error", "No new transactions file found.", "OK");
-                return;
-            }
-
-            // Append new transactions to AMEX.csv
-            var newLines = File.ReadAllLines(transactionsFile).Skip(1).Where(line => !string.IsNullOrWhiteSpace(line)).ToList();
-            if (newLines.Count > 0)
-                File.AppendAllLines(registerFile, newLines);
-
-            // Optionally clear the transactions file after appending
-            File.WriteAllText(transactionsFile, File.ReadLines(transactionsFile).FirstOrDefault() ?? "");
-
-            // Reload the register and update the UI
-            LoadRegister();
-
-            await DisplayAlert("Success", "New transactions added.", "OK");
+            // Refresh (imports happen via ImportWatcher)
+            await LoadFromDbAsync();
+            await DisplayAlert("AMEX", "Refreshed from database.", "OK");
         }
 
         private void RegisterCollectionView_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -130,7 +171,6 @@ namespace KukiFinance.Pages
 
         private async void ManualTransactionEntryButton_Clicked(object sender, EventArgs e)
         {
-            // Prompt for Date
             string dateStr = await DisplayPromptAsync("Manual Entry", "Enter date (MM/dd/yyyy):");
             if (string.IsNullOrWhiteSpace(dateStr) || !DateTime.TryParse(dateStr, out var date))
             {
@@ -138,7 +178,6 @@ namespace KukiFinance.Pages
                 return;
             }
 
-            // Prompt for Description
             string description = await DisplayPromptAsync("Manual Entry", "Enter description:");
             if (string.IsNullOrWhiteSpace(description))
             {
@@ -146,7 +185,6 @@ namespace KukiFinance.Pages
                 return;
             }
 
-            // Prompt for Amount
             string amountStr = await DisplayPromptAsync("Manual Entry", "Enter amount:");
             if (string.IsNullOrWhiteSpace(amountStr) || !decimal.TryParse(amountStr, out var amount))
             {
@@ -154,99 +192,42 @@ namespace KukiFinance.Pages
                 return;
             }
 
-            // Compose the CSV line (adjust columns as needed for each register)
-            string csvLine = $"{date:MM/dd/yyyy},{description},EDWARD KUKULSKI,-5006,{amount}";
-
-            // If the file does not exist, add a header first
-            if (!File.Exists(registerFile))
-            {
-                string header = "POSTED DATE,DESCRIPTION,NAME,ACCOUNT,AMOUNT";
-                File.WriteAllText(registerFile, header + Environment.NewLine);
-            }
-
-            // Append the new transaction
-            File.AppendAllText(registerFile, csvLine + Environment.NewLine);
-
-            // Refresh the register view
-            LoadRegister();
+            await InsertManualAsync(date, description, amount);
+            await LoadFromDbAsync();
 
             await DisplayAlert("Success", "Manual transaction added.", "OK");
         }
 
+        private async Task InsertManualAsync(DateTime date, string description, decimal amount)
+        {
+            await _accounts.SeedDefaultsIfEmptyAsync();
+            var accountId = await _accounts.GetIdByNameAsync(AccountNameInDb);
+            if (accountId is null)
+                throw new InvalidOperationException($"Account '{AccountNameInDb}' not found.");
+
+            var t = new Transaction
+            {
+                AccountId = accountId.Value,
+                PostedDate = DateOnly.FromDateTime(date),
+                Description = description,
+                Amount = amount,
+                Category = null,
+                FitId = null,
+                Source = "Manual",
+                CreatedUtc = DateTime.UtcNow
+            };
+
+            await _transactions.InsertAsync(t);
+        }
+
         private async void EditButton_Clicked(object sender, EventArgs e)
         {
-            if (RegisterCollectionView.SelectedItem is RegistryEntry selectedEntry)
-            {
-                string newDescription = await DisplayPromptAsync("Edit Description", "Enter new description:", initialValue: selectedEntry.Description);
-                if (string.IsNullOrWhiteSpace(newDescription) || newDescription == selectedEntry.Description)
-                    return;
-
-                // Update the description in memory
-                selectedEntry.Description = newDescription;
-
-                // Lookup new category using only unique keys
-                var categoryMap = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
-                foreach (var parts in File.ReadAllLines(categoryFile).Skip(1).Select(line => line.Split(',')).Where(parts => parts.Length >= 2))
-                {
-                    var key = parts[0].Trim();
-                    var value = parts[1].Trim();
-                    if (string.IsNullOrEmpty(key)) continue;
-                    if (!categoryMap.ContainsKey(key))
-                        categoryMap[key] = value;
-                }
-
-                categoryMap.TryGetValue(newDescription, out var newCategory);
-                selectedEntry.Category = newCategory ?? "";
-
-                // Refresh the CollectionView
-                var idx = viewModel.Entries.IndexOf(selectedEntry);
-                if (idx >= 0)
-                {
-                    viewModel.Entries.RemoveAt(idx);
-                    viewModel.Entries.Insert(idx, selectedEntry);
-                }
-
-                // Save the change to AMEX.csv
-                var allLines = File.ReadAllLines(registerFile).ToList();
-                if (allLines.Count > 1)
-                {
-                    // Start at i = 1 to skip the header row
-                    for (int i = 1; i < allLines.Count; i++)
-                    {
-                        var parts = allLines[i].Split(',');
-                        if (parts.Length < 5) continue;
-
-                        // Trim all fields for robust comparison
-                        for (int j = 0; j < parts.Length; j++)
-                            parts[j] = parts[j].Trim();
-
-                        // Parse date and amount
-                        if (DateTime.TryParse(parts[0], out var date) &&
-                            decimal.TryParse(parts[4], out var amount))
-                        {
-                            if (date.Date == (selectedEntry.Date ?? DateTime.MinValue).Date &&
-                                (amount * -1) == (selectedEntry.Amount ?? 0m))
-                            {
-                                parts[1] = newDescription;
-                                allLines[i] = string.Join(",", parts);
-                                break;
-                            }
-                        }
-                    }
-                    File.WriteAllLines(registerFile, allLines);
-                }
-
-                LoadRegister();
-            }
-            else
-            {
-                await DisplayAlert("Edit", "Please select a row to edit.", "OK");
-            }
+            await DisplayAlert("Edit", "Edit is not wired to SQLite yet. Next step: add TransactionId to RegistryEntry and update by Id.", "OK");
         }
+
         private async void CopyDescriptionButton_Clicked(object sender, EventArgs e)
         {
-            var selectedEntry = RegisterCollectionView.SelectedItem;
-            if (selectedEntry is RegistryEntry entry)
+            if (RegisterCollectionView.SelectedItem is RegistryEntry entry)
             {
                 await Clipboard.Default.SetTextAsync(entry.Description ?? "");
                 await DisplayAlert("Copied", "Description copied to clipboard.", "OK");
@@ -259,45 +240,9 @@ namespace KukiFinance.Pages
 
         private async void DeleteTransactionButton_Clicked(object sender, EventArgs e)
         {
-            var selectedEntry = RegisterCollectionView.SelectedItem;
-            if (selectedEntry is RegistryEntry entry)
-            {
-                bool confirm = await DisplayAlert("Delete", "Are you sure you want to delete this transaction?", "Yes", "No");
-                if (!confirm) return;
-
-                // Remove from the UI
-                viewModel.Entries.Remove(entry);
-
-                // Remove from AMEX.csv
-                var allLines = File.ReadAllLines(registerFile).ToList();
-                int startIdx = allLines.Count > 0 && allLines[0].ToUpper().Contains("DESCRIPTION") ? 1 : 0;
-
-                for (int i = startIdx; i < allLines.Count; i++)
-                {
-                    var parts = allLines[i].Split(',');
-                    if (parts.Length < 5) continue;
-
-                    // Match by Date, Amount (with sign inversion), and Description
-                    if (DateTime.TryParse(parts[0].Trim(), out var date) &&
-                        decimal.TryParse(parts[4].Trim(), out var amt) &&
-                        date == entry.Date &&
-                        (amt * -1) == entry.Amount &&
-                        parts[1].Trim() == entry.Description)
-                    {
-                        allLines.RemoveAt(i);
-                        break;
-                    }
-                }
-                File.WriteAllLines(registerFile, allLines);
-
-                // Refresh the register view
-                LoadRegister();
-            }
-            else
-            {
-                await DisplayAlert("Delete", "Please select a row to delete.", "OK");
-            }
+            await DisplayAlert("Delete", "Delete is not wired to SQLite yet. Next step: add TransactionId to RegistryEntry and delete by Id.", "OK");
         }
+
         private async void ReturnButton_Clicked(object sender, EventArgs e)
         {
             await Shell.Current.GoToAsync("//MainPage");

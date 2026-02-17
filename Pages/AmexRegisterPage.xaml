@@ -1,7 +1,7 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:converters="clr-namespace:KukiFinance.Converters"
-             x:Class="KukiFinance.Pages.AmexRegisterPage"
+             xmlns:converters="clr-namespace:eFinance.Converters"
+             x:Class="eFinance.Pages.AmexRegisterPage"
              Title="AMEX Register">
 
     <ContentPage.Resources>

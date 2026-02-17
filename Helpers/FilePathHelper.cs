@@ -3,33 +3,32 @@ using System.IO;
 using System.Linq;
 using Microsoft.Maui.Storage;
 
-namespace KukiFinance.Helpers;
+namespace eFinance.Helpers;
 
 /// <summary>
-/// Centralized data-path logic for KukiFinance "database" files (CSV, etc.).
+/// Centralized data-path logic for eFinance "database" files (CSV, etc.).
 ///
 /// Goal (MAUI-correct):
 /// - All live data stays in the app's per-user sandbox (FileSystem.AppDataDirectory).
 ///   On Windows this maps under:
 ///     C:\Users\<User>\AppData\Local\Packages\<AppId>\LocalState
-/// - OneDrive is used ONLY for explicit export/import actions (not as the live datastore).
+/// - Proton Drive is used ONLY for explicit export/import actions (not as the live datastore).
 ///
 /// Notes:
 /// - To preserve existing users' data, a one-time migration runs if the new folder is empty.
 ///   It copies (non-overwriting) files from older locations:
-///     1) OneDrive\Documents\AppData\KukiFinance (if present)
-///     2) C:\ProgramData\KukiFinance
-///     3) C:\Users\<User>\AppData\Local\KukiFinance
+///     1) C:\ProgramData\eFinance
+///     2) C:\Users\<User>\AppData\Local\eFinance
 /// </summary>
 public static class FilePathHelper
 {
-    private const string AppFolderName = "KukiFinance";
+    private const string AppFolderName = "eFinance";
 
     /// <summary>
-    /// Returns the base directory for KukiFinance data files and ensures it exists.
+    /// Returns the base directory for eFinance data files and ensures it exists.
     /// This is always a per-user, app-sandboxed directory.
     /// </summary>
-    public static string GetKukiFinanceDirectory()
+    public static string GeteFinanceDirectory()
     {
         var kukiDir = Path.Combine(FileSystem.AppDataDirectory, AppFolderName);
         Directory.CreateDirectory(kukiDir);
@@ -40,14 +39,14 @@ public static class FilePathHelper
     }
 
     /// <summary>
-    /// Returns a stable path for a given KukiFinance file name.
+    /// Returns a stable path for a given eFinance file name.
     /// </summary>
-    public static string GetKukiFinancePath(string fileName)
+    public static string GeteFinancePath(string fileName)
     {
         if (string.IsNullOrWhiteSpace(fileName))
             throw new ArgumentException("File name must be provided.", nameof(fileName));
 
-        return Path.Combine(GetKukiFinanceDirectory(), fileName);
+        return Path.Combine(GeteFinanceDirectory(), fileName);
     }
 
     /// <summary>
@@ -70,18 +69,6 @@ public static class FilePathHelper
             var sources = new System.Collections.Generic.List<string>();
 
 #if WINDOWS
-            // Legacy OneDrive location used by older versions (if it exists)
-            try
-            {
-                var oneDriveDir = OneDrivePathHelper.GetOneDriveKukiFinanceDirectory(createIfMissing: false);
-                if (!string.IsNullOrWhiteSpace(oneDriveDir))
-                    sources.Add(oneDriveDir);
-            }
-            catch
-            {
-                // ignore if OneDrive isn't available
-            }
-
             // Legacy shared-machine store
             sources.Add(Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
@@ -92,7 +79,7 @@ public static class FilePathHelper
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 AppFolderName));
 #else
-            // Non-Windows: prior versions may have used LocalApplicationData\KukiFinance
+            // Non-Windows: prior versions may have used LocalApplicationData\eFinance
             sources.Add(Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 AppFolderName));

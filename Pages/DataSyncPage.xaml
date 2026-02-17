@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             x:Class="KukiFinance.Pages.DataSyncPage"
-             Title="OneDrive Import/Export">
+             x:Class="eFinance.Pages.DataSyncPage"
+             Title="Proton Drive Import/Export">
 
     <ScrollView>
         <VerticalStackLayout Padding="20" Spacing="16">
-            <Label Text="OneDrive Sync"
+            <Label Text="Proton Drive Sync"
                    FontSize="22"
                    FontAttributes="Bold" />
 
-            <Label Text="Your working CSV files live in LocalState. Use these buttons to export a snapshot to OneDrive or import the latest snapshot from OneDrive."
+            <Label Text="Your working CSV files live in LocalState. Use these buttons to export a snapshot to Proton Drive or import the latest snapshot from Proton Drive."
                    FontSize="14" />
 
             
@@ -32,10 +32,10 @@
     </VerticalStackLayout>
 </Frame>
 
-            <Button Text="Export DB to OneDrive"
+            <Button Text="Export DB to Proton Drive"
                     Clicked="OnExportClicked" />
 
-            <Button Text="Import Latest DB from OneDrive"
+            <Button Text="Import Latest DB from Proton Drive"
                     Clicked="OnImportClicked" />
 
             <Label x:Name="StatusLabel"

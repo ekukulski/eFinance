@@ -2,19 +2,19 @@ using Microsoft.Maui.Controls;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using KukiFinance.Services;
-using KukiFinance.Pages;
+using eFinance.Services;
+using eFinance.Pages;
 
-namespace KukiFinance.Pages
+namespace eFinance.Pages
 {
     public partial class CategoryPage : ContentPage
     {
-        private readonly string categoryFile = FilePathHelper.GetKukiFinancePath("Category.csv");
-        private readonly string categoryListFile = FilePathHelper.GetKukiFinancePath("CategoryList.csv");
+        private readonly string categoryFile = FilePathHelper.GeteFinancePath("Category.csv");
+        private readonly string categoryListFile = FilePathHelper.GeteFinancePath("CategoryList.csv");
         public ObservableCollection<CategoryEntry> Entries { get; set; } = new();
         public ObservableCollection<CategoryEntry> FilteredEntries { get; set; } = new();
 
-        private string _searchText;
+        private string _searchText = string.Empty;
         public string SearchText
         {
             get => _searchText;
@@ -162,8 +162,8 @@ namespace KukiFinance.Pages
 
         public class CategoryEntry
         {
-            public string Description { get; set; }
-            public string Category { get; set; }
+            public required string Description { get; set; }
+            public required string Category { get; set; }
         }
         private void CategoryCollectionView_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {

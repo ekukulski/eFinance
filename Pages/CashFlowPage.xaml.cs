@@ -1,4 +1,4 @@
-namespace KukiFinance.Pages;
+namespace eFinance.Pages;
 
 public partial class CashFlowPage : ContentPage
 {

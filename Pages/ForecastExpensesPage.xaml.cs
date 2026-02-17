@@ -4,21 +4,22 @@ using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using KukiFinance.Converters;
-using KukiFinance.Helpers;
-using KukiFinance.Services;
+using eFinance.Converters;
+using eFinance.Helpers;
+using eFinance.Services;
 using Microsoft.Maui.Controls;
 
-namespace KukiFinance.Pages
+namespace eFinance.Pages
 {
     public partial class ForecastExpensesPage : ContentPage, INotifyPropertyChanged
     {
-        private readonly string ForecastFile = FilePathHelper.GetKukiFinancePath("ForecastExpenses.csv");
-        private readonly string CategoryFile = FilePathHelper.GetKukiFinancePath("CategoryList.csv");
+        private readonly string ForecastFile = FilePathHelper.GeteFinancePath("ForecastExpenses.csv");
+        private readonly string CategoryFile = FilePathHelper.GeteFinancePath("CategoryList.csv");
 
         public ObservableCollection<ForecastExpenseDisplay> ForecastExpenses { get; set; } = new();
 
-        public event PropertyChangedEventHandler PropertyChanged;
+        // Change: Use 'new' keyword to explicitly hide inherited event
+        public new event PropertyChangedEventHandler? PropertyChanged;
 
         public ForecastExpensesPage()
         {
@@ -290,7 +291,8 @@ namespace KukiFinance.Pages
                        .ToArray();
         }
 
-        protected void OnPropertyChanged(string propertyName) =>
+        // Change: Use 'new' keyword to explicitly hide inherited method
+        protected new void OnPropertyChanged(string propertyName) =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
         #endregion
@@ -315,19 +317,19 @@ namespace KukiFinance.Pages
 
         public class ForecastExpense
         {
-            public string Account { get; set; }
-            public string Frequency { get; set; }
-            public string Year { get; set; }
-            public string Month { get; set; }
-            public string Day { get; set; }
-            public string Category { get; set; }
+            public required string Account { get; set; }
+            public required string Frequency { get; set; }
+            public required string Year { get; set; }
+            public required string Month { get; set; }
+            public required string Day { get; set; }
+            public required string Category { get; set; }
             public decimal Amount { get; set; }
         }
 
         public class ForecastExpenseDisplay : ForecastExpense
         {
-            public string AmountFormatted { get; set; }
-            public Color AmountColor { get; set; }
+            public required string AmountFormatted { get; set; }
+            public required Color AmountColor { get; set; }
         }
 
         #endregion

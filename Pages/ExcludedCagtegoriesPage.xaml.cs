@@ -1,16 +1,16 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using Microsoft.Maui.Controls;
-using KukiFinance.Services;
+using eFinance.Services;
 using System.Linq;
 using System.Collections.Generic;
 
-namespace KukiFinance.Pages;
+namespace eFinance.Pages;
 
 public partial class ExcludedCategoriesPage : ContentPage
 {
-    private readonly string ExcludedCategoriesPath = FilePathHelper.GetKukiFinancePath("ExcludedCategories.csv");
-    private readonly string CategoryListPath = FilePathHelper.GetKukiFinancePath("CategoryList.csv");
+    private readonly string ExcludedCategoriesPath = FilePathHelper.GeteFinancePath("ExcludedCategories.csv");
+    private readonly string CategoryListPath = FilePathHelper.GeteFinancePath("CategoryList.csv");
 
     public ObservableCollection<string> ExcludedCategories { get; set; } = new();
 
@@ -81,7 +81,7 @@ public partial class ExcludedCategoriesPage : ContentPage
     // Utility for other pages/viewmodels
     public static HashSet<string> GetExcludedCategoriesFromCsv()
     {
-        var path = FilePathHelper.GetKukiFinancePath("ExcludedCategories.csv");
+        var path = FilePathHelper.GeteFinancePath("ExcludedCategories.csv");
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (!File.Exists(path)) return set;
         var lines = File.ReadAllLines(path);

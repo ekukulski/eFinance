@@ -3,47 +3,47 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Microsoft.Maui.Controls;
-using KukiFinance.Services;
+using eFinance.Services;
 using System.Globalization;
 using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Maui;
 using System.Collections.ObjectModel;
 
-namespace KukiFinance.Pages
+namespace eFinance.Pages
 {
     public partial class FinanceSummaryPage : ContentPage
     {
         // Account definitions (Name, FilePath)
         private readonly (string Name, string File)[] AssetAccounts = new[]
         {
-            ("Midland", FilePathHelper.GetKukiFinancePath("MidlandCurrent.csv")),
-            ("Charles Schwab Contributory", FilePathHelper.GetKukiFinancePath("CharlesSchwabContributoryCurrent.csv")),
-            ("Charles Schwab Joint Tenant", FilePathHelper.GetKukiFinancePath("CharlesSchwabJointTenantCurrent.csv")),
-            ("Charles Schwab Roth IRA Ed", FilePathHelper.GetKukiFinancePath("CharlesSchwabRothIraEdCurrent.csv")),
-            ("Charles Schwab Roth IRA Patti", FilePathHelper.GetKukiFinancePath("CharlesSchwabRothIraPattiCurrent.csv")),
-            ("NetX", FilePathHelper.GetKukiFinancePath("NetXCurrent.csv")),
-            ("HealthPro", FilePathHelper.GetKukiFinancePath("HealthProCurrent.csv")),
-            ("Select 401(K)", FilePathHelper.GetKukiFinancePath("Select401KCurrent.csv")),
-            ("Gold", FilePathHelper.GetKukiFinancePath("GoldCurrent.csv")),
-            ("House", FilePathHelper.GetKukiFinancePath("HouseCurrent.csv")),
-            ("Chevrolet Impala", FilePathHelper.GetKukiFinancePath("ChevroletImpalaCurrent.csv")),
-            ("Nissan Sentra", FilePathHelper.GetKukiFinancePath("NissanSentraCurrent.csv")),
+            ("Midland", FilePathHelper.GeteFinancePath("MidlandCurrent.csv")),
+            ("Charles Schwab Contributory", FilePathHelper.GeteFinancePath("CharlesSchwabContributoryCurrent.csv")),
+            ("Charles Schwab Joint Tenant", FilePathHelper.GeteFinancePath("CharlesSchwabJointTenantCurrent.csv")),
+            ("Charles Schwab Roth IRA Ed", FilePathHelper.GeteFinancePath("CharlesSchwabRothIraEdCurrent.csv")),
+            ("Charles Schwab Roth IRA Patti", FilePathHelper.GeteFinancePath("CharlesSchwabRothIraPattiCurrent.csv")),
+            ("NetX", FilePathHelper.GeteFinancePath("NetXCurrent.csv")),
+            ("HealthPro", FilePathHelper.GeteFinancePath("HealthProCurrent.csv")),
+            ("Select 401(K)", FilePathHelper.GeteFinancePath("Select401KCurrent.csv")),
+            ("Gold", FilePathHelper.GeteFinancePath("GoldCurrent.csv")),
+            ("House", FilePathHelper.GeteFinancePath("HouseCurrent.csv")),
+            ("Chevrolet Impala", FilePathHelper.GeteFinancePath("ChevroletImpalaCurrent.csv")),
+            ("Nissan Sentra", FilePathHelper.GeteFinancePath("NissanSentraCurrent.csv")),
         };
 
         private readonly (string Name, string File)[] CashAccounts = new[]
         {
-            ("Cash", FilePathHelper.GetKukiFinancePath("CashCurrent.csv")),
-            ("BMO Check", FilePathHelper.GetKukiFinancePath("BMOCheckCurrent.csv")),
-            ("BMO Money Market", FilePathHelper.GetKukiFinancePath("BMOMoneyMarketCurrent.csv")),
-            ("BMO CD", FilePathHelper.GetKukiFinancePath("BMOCDCurrent.csv")),
+            ("Cash", FilePathHelper.GeteFinancePath("CashCurrent.csv")),
+            ("BMO Check", FilePathHelper.GeteFinancePath("BMOCheckCurrent.csv")),
+            ("BMO Money Market", FilePathHelper.GeteFinancePath("BMOMoneyMarketCurrent.csv")),
+            ("BMO CD", FilePathHelper.GeteFinancePath("BMOCDCurrent.csv")),
         };
 
         private readonly (string Name, string File)[] LiabilityAccounts = new[]
         {
-            ("AMEX", FilePathHelper.GetKukiFinancePath("AMEXCurrent.csv")),
-            ("Visa", FilePathHelper.GetKukiFinancePath("VisaCurrent.csv")),
-            ("MasterCard", FilePathHelper.GetKukiFinancePath("MasterCardCurrent.csv")),
+            ("AMEX", FilePathHelper.GeteFinancePath("AMEXCurrent.csv")),
+            ("Visa", FilePathHelper.GeteFinancePath("VisaCurrent.csv")),
+            ("MasterCard", FilePathHelper.GeteFinancePath("MasterCardCurrent.csv")),
         };
 
         public FinanceSummaryPage()
@@ -123,7 +123,7 @@ namespace KukiFinance.Pages
 
             for (int i = 0; i < maxRows; i++)
             {
-                string assetName = null, cashName = null, liabilityName = null;
+                string assetName = string.Empty, cashName = string.Empty, liabilityName = string.Empty;
                 decimal? assetValue = null, cashValue = null, liabilityValue = null;
 
                 if (i < AssetAccounts.Length)
@@ -287,10 +287,10 @@ namespace KukiFinance.Pages
         }
 
         // Helper to create a value label with color and formatting logic
-        private Label CreateAmountLabel(decimal? value, string accountName, Color rowColor, bool isBold = false)
+        private Label CreateAmountLabel(decimal? value, string? accountName, Color rowColor, bool isBold = false)
         {
-            // Only show $0.00 if the account exists (name is not null)
-            if (accountName == null)
+            // Only show $0.00 if the account exists (name is not null/empty)
+            if (string.IsNullOrEmpty(accountName))
                 return new Label { Text = "", BackgroundColor = Colors.Transparent };
 
             // Format and color as per AmountFormatConverter and AmountColorConverter
@@ -450,39 +450,6 @@ namespace KukiFinance.Pages
             return saturdays;
         }
 
-        private decimal GetFilteredBalance(string filePath, int year, string quarter, string month)
-        {
-            if (!File.Exists(filePath)) return 0m;
-            var lines = File.ReadAllLines(filePath);
-            if (lines.Length < 2) return 0m;
-            var headers = lines[0].Split(',');
-            int dateIdx = Array.FindIndex(headers, h => h.Trim().Equals("Date", StringComparison.OrdinalIgnoreCase));
-            int balanceIdx = Array.FindIndex(headers, h => h.Trim().Equals("Balance", StringComparison.OrdinalIgnoreCase));
-            if (dateIdx < 0 || balanceIdx < 0) return 0m;
-
-            decimal lastBalance = 0m;
-            foreach (var line in lines.Skip(1))
-            {
-                var cols = line.Split(',');
-                if (cols.Length <= Math.Max(dateIdx, balanceIdx)) continue;
-                if (!DateTime.TryParse(cols[dateIdx], out var date)) continue;
-                if (date.Year != year) continue;
-
-                if (quarter != "All")
-                {
-                    int q = int.Parse(quarter.Substring(1, 1));
-                    if (((date.Month - 1) / 3 + 1) != q) continue;
-                }
-                if (month != "All")
-                {
-                    int m = DateTime.ParseExact(month, "MMMM", CultureInfo.CurrentCulture).Month;
-                    if (date.Month != m) continue;
-                }
-                if (decimal.TryParse(cols[balanceIdx], out var bal))
-                    lastBalance = bal;
-            }
-            return lastBalance;
-        }
         private decimal GetBalanceAsOf(string filePath, DateTime asOfDate)
         {
             if (!File.Exists(filePath))

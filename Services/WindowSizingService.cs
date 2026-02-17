@@ -5,7 +5,7 @@ using WinRT.Interop;
 using Microsoft.Maui.Storage;
 #endif
 
-namespace KukiFinance.Services;
+namespace eFinance.Services;
 
 public interface IWindowSizingService
 {
