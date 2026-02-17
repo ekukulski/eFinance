@@ -1,0 +1,84 @@
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="eFinance.Pages.CheckNumberPage"
+             Title="Check Number">
+    <Grid RowDefinitions="Auto,Auto,Auto,*" Padding="20">
+        <HorizontalStackLayout Grid.Row="1" Spacing="16">
+            <Button Text="Add New Check Number"
+                    x:Name="AddCheckNumberButton"
+                    BackgroundColor="LightBlue"
+                    TextColor="Black"
+                    FontSize="18"
+                    WidthRequest="240"
+                    HorizontalOptions="Start"
+                    Clicked="AddCheckNumberButton_Clicked" />
+            <Button Text="Edit" 
+                    x:Name="EditButton"
+                    BackgroundColor="CadetBlue"
+                    TextColor="Black"
+                    FontSize="18"
+                    WidthRequest="240"
+                    HorizontalOptions="Start"
+                    Clicked="EditButton_Clicked" />
+            <Button Text="Delete"
+                    x:Name="DeleteButton"
+                    BackgroundColor="PaleVioletRed"
+                    TextColor="Black"
+                    FontSize="18"
+                    WidthRequest="240"
+                    HorizontalOptions="Start"
+                    Clicked="DeleteButton_Clicked" />
+            <Button Text="Return"
+                    x:Name="ReturnButton"
+                    BackgroundColor="PaleGoldenrod"
+                    TextColor="Black"
+                    FontSize="18"
+                    WidthRequest="96"
+                    HorizontalOptions="Start"
+                    Clicked="ReturnButton_Clicked" />
+        </HorizontalStackLayout>
+        <!-- Keyboard Instructions (new) -->
+        <VerticalStackLayout Grid.Row="2" Spacing="4" Margin="0,16,0,0">
+            <Label Text="Select a row in the table then press ENTER key to go to top of table display." 
+                   FontSize="14" 
+                   TextColor="Gray"
+                   HorizontalOptions="Start"
+                   Margin="0"/>
+            <Label Text="Select a row in the table then press END key to go to bottom of table display." 
+                   FontSize="14" 
+                   TextColor="Gray"
+                   HorizontalOptions="Start"
+                   Margin="0"/>
+            <SearchBar
+                x:Name="CategorySearchBar"
+                Placeholder="Search..."
+                Text="{Binding SearchText, Mode=TwoWay}"
+                Margin="0,0,0,10"
+                FontSize="18"
+                HorizontalOptions="Start"
+                    WidthRequest="400" />
+            <!-- Table Header -->
+            <Grid ColumnDefinitions="150,500" Padding="0,10,0,10" Grid.Row="2">
+                <Label Text="CHECK NUMBER" FontAttributes="Bold" Grid.Column="0"/>
+                <Label Text="DESCRIPTION" FontAttributes="Bold" Grid.Column="1"/>
+            </Grid>
+        </VerticalStackLayout>
+        <!-- Table Body -->
+        <CollectionView x:Name="CheckNumberCollectionView"
+                        ItemsSource="{Binding FilteredEntries}"
+                        SelectionMode="Single"
+                        SelectionChanged="CheckNumberCollectionView_SelectionChanged"
+                        Grid.Row="3"
+                        VerticalOptions="FillAndExpand"
+                        VerticalScrollBarVisibility="Always">   
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <Grid ColumnDefinitions="150,500">
+                        <Label Grid.Column="0" Text="{Binding CheckNumber}" FontSize="16"/>
+                        <Label Grid.Column="1" Text="{Binding Description}" FontSize="16"/>
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+</ContentPage>

@@ -1,0 +1,70 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap mp">
+
+	<!--
+    IMPORTANT:
+    - Identity Name must be UNIQUE (different from your eFinance package identity)
+      to allow side-by-side installs.
+    - Publisher MUST match the certificate subject used to sign the package.
+      You plan to sign with CN=eFinance, so Publisher is CN=eFinance.
+    - Version must monotonically increase for updates to install cleanly.
+  -->
+	<Identity
+	  Name="EdwardKukulski.eFinance"
+	  Publisher="CN=eFinance"
+	  Version="0.1.0.0" />
+
+	<Properties>
+		<DisplayName>eFinance</DisplayName>
+		<PublisherDisplayName>Edward Kukulski</PublisherDisplayName>
+
+		<!--
+      OPTIONAL:
+      Leaving $placeholder$ is OK for .NET MAUI/WinUI packaging because the build
+      pipeline supplies assets. If you ever hit asset/packaging errors, replace these
+      with explicit paths to your packaged logo assets.
+    -->
+		<Logo>$placeholder$.png</Logo>
+	</Properties>
+
+	<Dependencies>
+		<TargetDeviceFamily
+		  Name="Windows.Desktop"
+		  MinVersion="10.0.17763.0"
+		  MaxVersionTested="10.0.19041.0" />
+	</Dependencies>
+
+	<Resources>
+		<Resource Language="x-generate" />
+	</Resources>
+
+	<Applications>
+		<Application
+		  Id="App"
+		  Executable="$targetnametoken$.exe"
+		  EntryPoint="$targetentrypoint$">
+			<uap:VisualElements
+			  DisplayName="eFinance"
+			  Description="eFinance"
+			  Square150x150Logo="$placeholder$.png"
+			  Square44x44Logo="$placeholder$.png"
+			  BackgroundColor="transparent">
+				<uap:DefaultTile
+				  Square71x71Logo="$placeholder$.png"
+				  Wide310x150Logo="$placeholder$.png"
+				  Square310x310Logo="$placeholder$.png" />
+				<uap:SplashScreen Image="$placeholder$.png" />
+			</uap:VisualElements>
+		</Application>
+	</Applications>
+
+	<Capabilities>
+		<rescap:Capability Name="runFullTrust" />
+	</Capabilities>
+
+</Package>

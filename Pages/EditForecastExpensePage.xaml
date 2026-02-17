@@ -1,0 +1,47 @@
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="eFinance.Pages.EditForecastExpensePage"
+             Title="Edit Forecast Expense">
+    <VerticalStackLayout Padding="20" Spacing="16">
+        <Label Text="Edit Forecast Expense"
+               FontAttributes="Bold"
+               FontSize="20" />
+
+        <Picker x:Name="AccountPicker"
+                Title="Account"
+                SelectedIndexChanged="AccountPicker_SelectedIndexChanged" />
+
+        <Picker x:Name="FrequencyPicker"
+                Title="Frequency"
+                SelectedIndexChanged="FrequencyPicker_SelectedIndexChanged" />
+
+        <Picker x:Name="YearPicker"
+                Title="Year"
+                SelectedIndexChanged="YearPicker_SelectedIndexChanged" />
+
+        <Picker x:Name="MonthPicker"
+                Title="Month"
+                SelectedIndexChanged="MonthPicker_SelectedIndexChanged" />
+
+        <Picker x:Name="DayPicker"
+                Title="Day"
+                SelectedIndexChanged="DayPicker_SelectedIndexChanged" />
+
+        <Picker x:Name="CategoryPicker"
+                Title="Category"
+                SelectedIndexChanged="CategoryPicker_SelectedIndexChanged" />
+
+        <Entry x:Name="AmountEntry"
+               Keyboard="Numeric"
+               Placeholder="Amount" />
+
+        <HorizontalStackLayout Spacing="12">
+            <Button Text="Next"
+                    Clicked="OnNextClicked" />
+            <Button Text="Save"
+                    Clicked="OnSaveClicked" />
+            <Button Text="Cancel"
+                    Clicked="OnCancelClicked" />
+        </HorizontalStackLayout>
+    </VerticalStackLayout>
+</ContentPage>

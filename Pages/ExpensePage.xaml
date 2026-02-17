@@ -1,0 +1,61 @@
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:eFinance.Converters"
+             x:Class="eFinance.Pages.ExpensePage"
+             Title="Expenses">
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <local:AmountColorConverter x:Key="AmountColorConverter"/>
+        </ResourceDictionary>
+    </ContentPage.Resources>
+    <VerticalStackLayout>
+        <HorizontalStackLayout Spacing="10" Padding="10">
+            <Picker x:Name="YearPicker" Title="Year" WidthRequest="100"/>
+            <Picker x:Name="QuarterPicker" Title="Quarter" WidthRequest="100"/>
+            <Picker x:Name="MonthPicker" Title="Month" WidthRequest="120"/>
+            <Button Text="Show Expenses" BackgroundColor="DarkSeaGreen" Clicked="OnShowExpensesClicked"/>
+        </HorizontalStackLayout>
+
+        <!-- Expense Total Row -->
+        <HorizontalStackLayout Padding="10,0,10,10">
+            <Label Text="Expense Total:" FontAttributes="Bold" FontSize="18"/>
+            <Label x:Name="ExpenseTotalLabel" FontAttributes="Bold" FontSize="18" TextColor="DarkRed" Margin="10,0,0,0"/>
+        </HorizontalStackLayout>
+
+        <!-- Daily Spend Row -->
+        <HorizontalStackLayout Padding="10,0,10,10">
+            <Label Text="Daily Spend:" FontAttributes="Bold" FontSize="18"/>
+            <Label x:Name="DailySpendLabel" FontAttributes="Bold" FontSize="18" TextColor="DarkBlue" Margin="10,0,0,0"/>
+        </HorizontalStackLayout>
+
+        <CollectionView x:Name="ExpenseCollectionView"
+                        SelectionMode="Single"
+                        SelectionChanged="OnCategorySelected"
+                        HeightRequest="1100">
+            <CollectionView.Header>
+                <Grid Padding="8" ColumnDefinitions="*,Auto">
+                    <Label Text="Category" FontAttributes="Bold"/>
+                    <Label Text="Total" FontAttributes="Bold" Grid.Column="1"/>
+                </Grid>
+            </CollectionView.Header>
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <Grid Padding="8" ColumnDefinitions="*,Auto">
+                        <Label Text="{Binding Category}" />
+                        <Label Text="{Binding Total, StringFormat='{}{0:C2}'}" Grid.Column="1"
+                               TextColor="{Binding Total, Converter={StaticResource AmountColorConverter}}"/>
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <Button Text="Return"
+                x:Name="ReturnButton"
+                WidthRequest="96"
+                BackgroundColor="IndianRed"
+                TextColor="Black"
+                FontSize="16"
+                HorizontalOptions="Fill"
+                Clicked="ReturnButton_Clicked" />
+    </VerticalStackLayout>
+</ContentPage>

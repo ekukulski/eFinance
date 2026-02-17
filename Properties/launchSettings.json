@@ -1,0 +1,10 @@
+{
+    "profiles": {
+        "eFinance": {
+            "commandName": "Project"
+        },
+        "eFinance (MSIX)": {
+            "commandName": "MsixPackage"
+        }
+    }
+}

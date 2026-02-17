@@ -1,0 +1,77 @@
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="eFinance.Pages.ForecastExpensesPage"
+             Title="Forecast Expenses">
+    <VerticalStackLayout>
+        <HorizontalStackLayout Spacing="8" Padding="20" Margin="0,8,0,8">
+            <Button Text="Add Forecast Expense"
+                    BackgroundColor="LightGreen"
+                    TextColor="Black"
+                    FontSize="20"
+                    Clicked="OnAddClicked" />
+            <Button Text="Edit Forecast Expense"
+                    BackgroundColor="LightSkyBlue"
+                    TextColor="Black"
+                    FontSize="20"
+                    Clicked="OnEditClicked" />
+            <Button Text="Delete Forecast Expense"
+                    BackgroundColor="LightCoral"
+                    TextColor="Black"
+                    FontSize="20"
+                    Clicked="OnDeleteClicked" />
+            <Button Text="Return"
+                    BackgroundColor="IndianRed"
+                    TextColor="Black"
+                    FontSize="20"
+                    Clicked="OnReturnClicked" />
+        </HorizontalStackLayout>
+
+        <CollectionView x:Name="ForecastExpensesView"
+                        ItemsSource="{Binding ForecastExpenses}"
+                        SelectionMode="Single"
+                        Margin="20,0,0,0">
+            <CollectionView.Header>
+                <!-- 7 columns: Account, Frequency, Year, Month, Day, Category, Amount -->
+                <Grid ColumnDefinitions="*,*,*,*,*,*,*" Padding="0">
+                    <Label Text="Account"
+                           Grid.Column="0"
+                           FontAttributes="Bold" />
+                    <Label Text="Frequency"
+                           Grid.Column="1"
+                           FontAttributes="Bold" />
+                    <Label Text="Year"
+                           Grid.Column="2"
+                           FontAttributes="Bold" />
+                    <Label Text="Month"
+                           Grid.Column="3"
+                           FontAttributes="Bold" />
+                    <Label Text="Day"
+                           Grid.Column="4"
+                           FontAttributes="Bold" />
+                    <Label Text="Category"
+                           Grid.Column="5"
+                           FontAttributes="Bold" />
+                    <Label Text="Amount"
+                           Grid.Column="6"
+                           FontAttributes="Bold" />
+                </Grid>
+            </CollectionView.Header>
+
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <Grid ColumnDefinitions="*,*,*,*,*,*,*" Padding="0">
+                        <Label Text="{Binding Account}"   Grid.Column="0" />
+                        <Label Text="{Binding Frequency}" Grid.Column="1" />
+                        <Label Text="{Binding Year}"      Grid.Column="2" />
+                        <Label Text="{Binding Month}"     Grid.Column="3" />
+                        <Label Text="{Binding Day}"       Grid.Column="4" />
+                        <Label Text="{Binding Category}"  Grid.Column="5" />
+                        <Label Text="{Binding AmountFormatted}"
+                               TextColor="{Binding AmountColor}"
+                               Grid.Column="6" />
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </VerticalStackLayout>
+</ContentPage>
