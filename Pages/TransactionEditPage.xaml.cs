@@ -138,7 +138,211 @@ ORDER BY Name COLLATE NOCASE;
                 : $"FitId: {t.FitId} (will NOT change when you edit)";
         }
 
-        private async void SaveButton_Clicked(object sender, EventArgs e)
+        
+        private async void AddCategoryButton_Clicked(object sender, EventArgs e)
+        {
+            try
+            {
+                var name = await DisplayPromptAsync("Add Category", "Enter a new category name:", "Add", "Cancel",
+                                                    placeholder: "e.g., Dining", maxLength: 80, keyboard: Keyboard.Text);
+                if (name is null)
+                    return; // canceled
+
+                name = name.Trim();
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    await DisplayAlert("Invalid", "Category name is required.", "OK");
+                    return;
+                }
+
+                var id = await EnsureCategoryAsync(name);
+
+                // Reload and select the new/existing category
+                await LoadCategoriesAsync();
+                var idx = _categories.FindIndex(c => c.Id == id);
+                CategoryPicker.SelectedIndex = idx >= 0 ? idx : 0;
+            }
+            catch (Exception ex)
+            {
+                await DisplayAlert("Error", ex.Message, "OK");
+            }
+        }
+
+        private async Task<long> EnsureCategoryAsync(string name)
+        {
+            using var conn = _db.OpenConnection();
+
+            // 1) Try find existing (case-insensitive)
+            using (var find = conn.CreateCommand())
+            {
+                find.CommandText = @"
+SELECT Id
+FROM Categories
+WHERE IsActive = 1 AND Name = $name COLLATE NOCASE
+LIMIT 1;";
+                find.Parameters.AddWithValue("$name", name);
+
+                var existing = await find.ExecuteScalarAsync();
+                if (existing is long id1)
+                    return id1;
+                if (existing is int idInt)
+                    return idInt;
+            }
+
+            // 2) Insert new
+            using (var ins = conn.CreateCommand())
+            {
+                ins.CommandText = @"
+INSERT INTO Categories (Name, IsActive, CreatedUtc)
+VALUES ($name, 1, CURRENT_TIMESTAMP);
+SELECT last_insert_rowid();";
+                ins.Parameters.AddWithValue("$name", name);
+
+                var newIdObj = await ins.ExecuteScalarAsync();
+                if (newIdObj is long id2) return id2;
+                if (newIdObj is int id2i) return id2i;
+            }
+
+            throw new InvalidOperationException("Unable to create category.");
+        }
+
+        private async void CreateRuleButton_Clicked(object sender, EventArgs e)
+        {
+            try
+            {
+                var selected = CategoryPicker.SelectedItem as CategoryOption;
+                if (selected?.Id is null)
+                {
+                    await DisplayAlert("Select Category", "Choose a category first (or add a new one), then create a rule.", "OK");
+                    return;
+                }
+
+                var desc = (DescriptionEntry.Text ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(desc))
+                {
+                    await DisplayAlert("Invalid", "Description is required to create a rule.", "OK");
+                    return;
+                }
+
+                // Match type choice (simple first stage)
+                var matchType = await DisplayActionSheet("Rule match type", "Cancel", null, "Contains", "StartsWith", "Exact");
+                if (matchType is null || matchType == "Cancel")
+                    return;
+
+                // Pattern prompt (defaults to full description)
+                var pattern = await DisplayPromptAsync("Rule pattern",
+                                                      "Enter the text to match against descriptions:",
+                                                      "Save Rule",
+                                                      "Cancel",
+                                                      initialValue: desc,
+                                                      maxLength: 200,
+                                                      keyboard: Keyboard.Text);
+
+                if (pattern is null)
+                    return; // canceled
+
+                pattern = pattern.Trim();
+                if (string.IsNullOrWhiteSpace(pattern))
+                {
+                    await DisplayAlert("Invalid", "Rule pattern cannot be empty.", "OK");
+                    return;
+                }
+
+                var ruleId = await InsertCategoryRuleAsync(pattern, selected.Id.Value, matchType);
+
+                // Optional: apply to existing matching transactions (safe default: only uncategorized)
+                var apply = await DisplayAlert("Apply now?",
+                                               "Apply this rule to existing uncategorized transactions for this account?",
+                                               "Yes", "No");
+
+                if (apply)
+                {
+                    var affected = await ApplyRuleToExistingAsync(_accountId, ruleId, pattern, selected.Id.Value, matchType);
+                    await DisplayAlert("Rule saved", $"Rule created. Updated {affected} existing transaction(s).", "OK");
+                }
+                else
+                {
+                    await DisplayAlert("Rule saved", "Rule created.", "OK");
+                }
+            }
+            catch (Exception ex)
+            {
+                await DisplayAlert("Error", ex.Message, "OK");
+            }
+        }
+
+        private async Task<long> InsertCategoryRuleAsync(string pattern, long categoryId, string matchType)
+        {
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            cmd.CommandText = @"
+INSERT INTO CategoryRules (DescriptionPattern, CategoryId, MatchType, Priority, IsEnabled, CreatedUtc)
+VALUES ($pattern, $categoryId, $matchType, 100, 1, CURRENT_TIMESTAMP);
+SELECT last_insert_rowid();";
+            cmd.Parameters.AddWithValue("$pattern", pattern);
+            cmd.Parameters.AddWithValue("$categoryId", categoryId);
+            cmd.Parameters.AddWithValue("$matchType", matchType);
+
+            var idObj = await cmd.ExecuteScalarAsync();
+            if (idObj is long id) return id;
+            if (idObj is int id2) return id2;
+            throw new InvalidOperationException("Unable to create rule.");
+        }
+
+        private async Task<int> ApplyRuleToExistingAsync(long accountId, long ruleId, string pattern, long categoryId, string matchType)
+        {
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            // Safe first stage: only apply to transactions that are currently uncategorized.
+            // Respect user's manual overrides.
+            cmd.CommandText = matchType switch
+            {
+                "Exact" => @"
+UPDATE Transactions
+SET CategoryId = $categoryId,
+    Category = NULL,
+    MatchedRuleId = $ruleId,
+    MatchedRulePattern = $pattern,
+    CategorizedUtc = CURRENT_TIMESTAMP
+WHERE AccountId = $accountId
+  AND CategoryId IS NULL
+  AND TRIM(Description) = $pattern;",
+
+                "StartsWith" => @"
+UPDATE Transactions
+SET CategoryId = $categoryId,
+    Category = NULL,
+    MatchedRuleId = $ruleId,
+    MatchedRulePattern = $pattern,
+    CategorizedUtc = CURRENT_TIMESTAMP
+WHERE AccountId = $accountId
+  AND CategoryId IS NULL
+  AND Description LIKE ($pattern || '%') ESCAPE '\';",
+
+                _ => @"
+UPDATE Transactions
+SET CategoryId = $categoryId,
+    Category = NULL,
+    MatchedRuleId = $ruleId,
+    MatchedRulePattern = $pattern,
+    CategorizedUtc = CURRENT_TIMESTAMP
+WHERE AccountId = $accountId
+  AND CategoryId IS NULL
+  AND Description LIKE ('%' || $pattern || '%') ESCAPE '\';"
+            };
+
+            cmd.Parameters.AddWithValue("$accountId", accountId);
+            cmd.Parameters.AddWithValue("$ruleId", ruleId);
+            cmd.Parameters.AddWithValue("$pattern", pattern);
+            cmd.Parameters.AddWithValue("$categoryId", categoryId);
+
+            var rows = await cmd.ExecuteNonQueryAsync();
+            return rows;
+        }
+
+private async void SaveButton_Clicked(object sender, EventArgs e)
         {
             try
             {
@@ -228,7 +432,14 @@ ORDER BY Name COLLATE NOCASE;
             await CloseAsync(false);
         }
 
-        private async Task CloseAsync(bool saved)
+        
+
+        async void ReturnButton_Clicked(object sender, EventArgs e)
+        {
+            // Return is a quick navigation back to the register with no prompts/alerts.
+            await CloseAsync(false);
+        }
+private async Task CloseAsync(bool saved)
         {
             if (!_tcs.Task.IsCompleted)
                 _tcs.TrySetResult(saved);
@@ -251,7 +462,10 @@ ORDER BY Name COLLATE NOCASE;
 
             try
             {
-                await Navigation.PopAsync();
+				if (Navigation is not null)
+				{
+					await Navigation.PopAsync();
+				}
             }
             catch
             {
