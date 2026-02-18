@@ -98,11 +98,12 @@ namespace eFinance.Pages
                     Balance = openingBalance
                 });
 
-                // For running balance, use chronological order
+                // For running balance, we must compute chronologically (oldest -> newest)
                 foreach (var t in dbTx.OrderBy(x => x.PostedDate).ThenBy(x => x.Id))
                 {
                     entries.Add(new RegistryEntry
                     {
+                        TransactionId = t.Id,
                         Date = t.PostedDate.ToDateTime(TimeOnly.MinValue),
                         Description = t.Description,
                         Category = t.Category ?? "",
@@ -125,12 +126,19 @@ namespace eFinance.Pages
                     entries[i].Balance = running;
                 }
 
+                // Display newest -> oldest (opening balance naturally ends up at the bottom)
+                var displayEntries = entries
+                    .OrderByDescending(e => e.Date)
+                    .ThenByDescending(e => e.TransactionId ?? long.MinValue)
+                    .ToList();
+
                 // Load into VM
                 viewModel.Entries.Clear();
-                foreach (var e in entries)
+                foreach (var e in displayEntries)
                     viewModel.Entries.Add(e);
 
-                viewModel.CurrentBalance = viewModel.Entries.LastOrDefault()?.Balance ?? 0m;
+                // Current balance should be the running balance after applying all transactions
+                viewModel.CurrentBalance = running;
                 viewModel.FilterEntries();
 
                 Debug.WriteLine($"AMEX register loaded: {dbTx.Count} tx. Opening={openingBalance} on {openingDate:yyyy-MM-dd}. Balance={viewModel.CurrentBalance}");
@@ -179,7 +187,6 @@ LIMIT 1;
         {
             // Refresh (imports happen via ImportWatcher)
             await LoadFromDbAsync();
-            await DisplayAlert("AMEX", "Refreshed from database.", "OK");
         }
 
         private void RegisterCollectionView_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -189,76 +196,108 @@ LIMIT 1;
 
         private async void ManualTransactionEntryButton_Clicked(object sender, EventArgs e)
         {
-            string dateStr = await DisplayPromptAsync("Manual Entry", "Enter date (MM/dd/yyyy):");
-            if (string.IsNullOrWhiteSpace(dateStr) || !DateTime.TryParse(dateStr, out var date))
-            {
-                await DisplayAlert("Invalid", "Please enter a valid date.", "OK");
-                return;
-            }
-
-            string description = await DisplayPromptAsync("Manual Entry", "Enter description:");
-            if (string.IsNullOrWhiteSpace(description))
-            {
-                await DisplayAlert("Invalid", "Please enter a description.", "OK");
-                return;
-            }
-
-            string amountStr = await DisplayPromptAsync("Manual Entry", "Enter amount:");
-            if (string.IsNullOrWhiteSpace(amountStr) || !decimal.TryParse(amountStr, out var amount))
-            {
-                await DisplayAlert("Invalid", "Please enter a valid amount.", "OK");
-                return;
-            }
-
-            await InsertManualAsync(date, description, amount);
-            await LoadFromDbAsync();
-
-            await DisplayAlert("Success", "Manual transaction added.", "OK");
-        }
-
-        private async Task InsertManualAsync(DateTime date, string description, decimal amount)
-        {
             await _accounts.SeedDefaultsIfEmptyAsync();
             var accountId = await _accounts.GetIdByNameAsync(AccountNameInDb);
             if (accountId is null)
-                throw new InvalidOperationException($"Account '{AccountNameInDb}' not found.");
-
-            var t = new Transaction
             {
-                AccountId = accountId.Value,
-                PostedDate = DateOnly.FromDateTime(date),
-                Description = description,
-                Amount = amount,
-                Category = null,
-                FitId = null,
-                Source = "Manual",
-                CreatedUtc = DateTime.UtcNow
-            };
+                await DisplayAlert("AMEX", $"Account '{AccountNameInDb}' not found in database.", "OK");
+                return;
+            }
 
-            await _transactions.InsertAsync(t);
+            var page = new TransactionEditPage(_db, _transactions, accountId.Value, transactionId: null);
+            await Navigation.PushModalAsync(new NavigationPage(page));
+            var saved = await page.Result;
+
+            if (saved)
+                await LoadFromDbAsync();
         }
 
         private async void EditButton_Clicked(object sender, EventArgs e)
         {
-            await DisplayAlert("Edit", "Edit is not wired to SQLite yet. Next step: add TransactionId to RegistryEntry and update by Id.", "OK");
-        }
+            if (RegisterCollectionView.SelectedItem is not RegistryEntry entry)
+            {
+                await DisplayAlert("Edit", "Please select a transaction row to edit.", "OK");
+                return;
+            }
 
-        private async void CopyDescriptionButton_Clicked(object sender, EventArgs e)
-        {
-            if (RegisterCollectionView.SelectedItem is RegistryEntry entry)
+            if (entry.TransactionId is null)
             {
-                await Clipboard.Default.SetTextAsync(entry.Description ?? "");
-                await DisplayAlert("Copied", "Description copied to clipboard.", "OK");
+                await DisplayAlert("Edit", "The opening balance row cannot be edited here.", "OK");
+                return;
             }
-            else
+
+            await _accounts.SeedDefaultsIfEmptyAsync();
+            var accountId = await _accounts.GetIdByNameAsync(AccountNameInDb);
+            if (accountId is null)
             {
-                await DisplayAlert("Copy", "Please select a row to copy.", "OK");
+                await DisplayAlert("AMEX", $"Account '{AccountNameInDb}' not found in database.", "OK");
+                return;
             }
+
+            var page = new TransactionEditPage(_db, _transactions, accountId.Value, entry.TransactionId.Value);
+            await Navigation.PushModalAsync(new NavigationPage(page));
+            var saved = await page.Result;
+
+            if (saved)
+                await LoadFromDbAsync();
         }
 
         private async void DeleteTransactionButton_Clicked(object sender, EventArgs e)
         {
-            await DisplayAlert("Delete", "Delete is not wired to SQLite yet. Next step: add TransactionId to RegistryEntry and delete by Id.", "OK");
+            if (RegisterCollectionView.SelectedItem is not RegistryEntry entry)
+            {
+                await DisplayAlert("Delete", "Please select a transaction row to delete.", "OK");
+                return;
+            }
+
+            if (entry.TransactionId is null)
+            {
+                await DisplayAlert("Delete", "The opening balance row cannot be deleted here.", "OK");
+                return;
+            }
+
+            var ok = await DisplayAlert(
+                "Confirm Delete",
+                $"Delete this transaction?\n\n{entry.Date:yyyy-MM-dd}\n{entry.Description}\n{entry.Amount}",
+                "Delete",
+                "Cancel");
+
+            if (!ok)
+                return;
+
+            // Preserve approximate scroll position (keep the user near where they were).
+            var priorIndex = viewModel.FilteredEntries.IndexOf(entry);
+
+            var deleted = await _transactions.DeleteByIdAsync(entry.TransactionId.Value);
+            if (!deleted)
+            {
+                await DisplayAlert("Delete", "Nothing was deleted (it may have already been removed).", "OK");
+                await LoadFromDbAsync();
+                return;
+            }
+
+            await LoadFromDbAsync();
+
+            // Scroll back near the previous index (bounded).
+            try
+            {
+                var targetIndex = priorIndex;
+                if (targetIndex < 0) targetIndex = 0;
+                if (targetIndex >= viewModel.FilteredEntries.Count)
+                    targetIndex = Math.Max(0, viewModel.FilteredEntries.Count - 1);
+
+                if (viewModel.FilteredEntries.Count > 0)
+                {
+                    Dispatcher.Dispatch(() =>
+                    {
+                        RegisterCollectionView.ScrollTo(targetIndex, position: ScrollToPosition.Center, animate: false);
+                    });
+                }
+            }
+            catch
+            {
+                // non-fatal
+            }
         }
 
         private async void ReturnButton_Clicked(object sender, EventArgs e)

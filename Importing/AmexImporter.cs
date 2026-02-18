@@ -1,8 +1,8 @@
 ﻿using System;
-using System.Globalization;
-using System.Linq;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using eFinance.Data.Models;
 using eFinance.Data.Repositories;
@@ -33,13 +33,13 @@ namespace eFinance.Importing
 
             var fileName = Path.GetFileName(filePath);
 
-            // Convenience: allow historical naming AND the AMEX default download name.
+            // Convenience: allow historical naming AND AMEX default download name.
             var nameLooksLikeAmex =
                 fileName.Contains("amex", StringComparison.OrdinalIgnoreCase) ||
                 fileName.Equals("activity.csv", StringComparison.OrdinalIgnoreCase);
 
             // Strong check: detect AMEX by header columns.
-            // Your AMEX activity.csv header is:
+            // Expected header example:
             // Date,Description,Card Member,Account #,Amount
             var header = File.ReadLines(filePath).FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(header))
@@ -51,7 +51,6 @@ namespace eFinance.Importing
                 bool hasAmexHeaders =
                     cols.Contains("Date") &&
                     cols.Contains("Description") &&
-                    cols.Contains("Card Member") &&
                     cols.Contains("Account #") &&
                     cols.Contains("Amount");
 
@@ -59,7 +58,6 @@ namespace eFinance.Importing
                     return true;
             }
 
-            // Fallback: filename heuristic.
             return nameLooksLikeAmex;
         }
 
@@ -72,6 +70,10 @@ namespace eFinance.Importing
             int inserted = 0;
             int ignored = 0;
             int failed = 0;
+
+            // Key fix: prevent legit duplicates from colliding on FitId.
+            // We build a "base key" and then append an occurrence number (001, 002, ...).
+            var occurrenceByBaseKey = new Dictionary<string, int>(StringComparer.Ordinal);
 
             foreach (var row in CsvReader.Read(filePath))
             {
@@ -89,8 +91,9 @@ namespace eFinance.Importing
                     var accountNo = FirstNonNull(row,
                         "Account #", "Account", "Account Number");
 
-                    var creditDebitText = FirstNonNull(row,
-                        "Credit/Debit", "Credit or Debit", "CreditOrDebit", "Type", "Transaction Type");
+                    // Include Card Member if present (reduces collisions further).
+                    var cardMember = FirstNonNull(row,
+                        "Card Member", "CardMember", "CARD MEMBER");
 
                     if (dateText is null || desc is null || amountText is null)
                     {
@@ -99,11 +102,34 @@ namespace eFinance.Importing
                     }
 
                     var date = ParseDate(dateText);
-                    var parsedAmount = ParseDecimal(amountText);
 
-                    var amount = NormalizeAmexAmount(parsedAmount, creditDebitText, desc);
+                    // AMEX CSV convention:
+                    //   Charges are positive
+                    //   Credits/payments are negative
+                    // eFinance convention:
+                    //   Charges should be negative
+                    //   Credits should be positive
+                    // Therefore: eFinanceAmount = -csvAmount
+                    var csvAmount = ParseDecimal(amountText);
+                    var amount = NormalizeAmexAmount(csvAmount);
 
-                    var fitId = $"{date:yyyyMMdd}|{desc}|{accountNo}|{amount.ToString(CultureInfo.InvariantCulture)}";
+                    // Build stable, collision-resistant FitId.
+                    // Base key defines "what" the transaction is; occurrence makes duplicates unique.
+                    var normDesc = NormalizeKeyText(desc);
+                    var normAcct = NormalizeKeyText(accountNo);
+                    var normMember = NormalizeKeyText(cardMember);
+
+                    // Normalize amount text so 12.3 and 12.30 are identical in the key.
+                    var normAmountText = amount.ToString("0.00", CultureInfo.InvariantCulture);
+
+                    var baseKey = $"{date:yyyyMMdd}|{normAcct}|{normMember}|{normAmountText}|{normDesc}";
+
+                    occurrenceByBaseKey.TryGetValue(baseKey, out var n);
+                    n++;
+                    occurrenceByBaseKey[baseKey] = n;
+
+                    // Final FitId: stable across re-imports of the same content, but unique for legit duplicates.
+                    var fitId = $"{baseKey}|{n:D3}";
 
                     var transaction = new Transaction
                     {
@@ -113,7 +139,7 @@ namespace eFinance.Importing
                         Amount = amount,
                         Category = null, // legacy; keep null
                         FitId = fitId,
-                        Source = "AMEX",
+                        Source = SourceName,
                         CreatedUtc = DateTime.UtcNow
                     };
 
@@ -131,57 +157,27 @@ namespace eFinance.Importing
                     if (didInsert) inserted++;
                     else ignored++;
                 }
-                catch
+                catch (Exception ex)
                 {
                     failed++;
+                    System.Diagnostics.Debug.WriteLine("AMEX import row failed: " + ex);
                 }
             }
+
+            System.Diagnostics.Debug.WriteLine(
+                $"AMEX import finished. Inserted={inserted}, Ignored={ignored}, Failed={failed}");
 
             return new ImportResult(inserted, ignored, failed);
         }
 
-        private static decimal NormalizeAmexAmount(decimal parsedAmount, string? creditDebitText, string description)
+        /// <summary>
+        /// Convert AMEX CSV amount into eFinance sign convention.
+        /// AMEX: charges positive, credits negative.
+        /// eFinance: charges negative, credits positive.
+        /// </summary>
+        private static decimal NormalizeAmexAmount(decimal csvAmount)
         {
-            if (!string.IsNullOrWhiteSpace(creditDebitText))
-            {
-                var t = creditDebitText.Trim();
-
-                if (IsCreditIndicator(t))
-                    return Math.Abs(parsedAmount);
-
-                if (IsDebitIndicator(t))
-                    return -Math.Abs(parsedAmount);
-            }
-
-            if (LooksLikeCredit(description))
-                return Math.Abs(parsedAmount);
-
-            return -Math.Abs(parsedAmount);
-        }
-
-        private static bool IsCreditIndicator(string text)
-        {
-            var t = text.Trim().ToLowerInvariant();
-            return t is "credit" or "cr" or "c"
-                   or "payment" or "refund" or "reversal" or "return";
-        }
-
-        private static bool IsDebitIndicator(string text)
-        {
-            var t = text.Trim().ToLowerInvariant();
-            return t is "debit" or "dr" or "d"
-                   or "charge" or "purchase";
-        }
-
-        private static bool LooksLikeCredit(string description)
-        {
-            var d = (description ?? "").Trim().ToLowerInvariant();
-            return d.Contains("payment")
-                   || d.Contains("autopay")
-                   || d.Contains("thank you")
-                   || d.Contains("refund")
-                   || d.Contains("reversal")
-                   || d.Contains("credit");
+            return -csvAmount;
         }
 
         private static string? FirstNonNull(CsvRow row, params string[] names)
@@ -195,11 +191,28 @@ namespace eFinance.Importing
             return null;
         }
 
+        /// <summary>
+        /// Normalizes text for key generation (FitId base key).
+        /// </summary>
+        private static string NormalizeKeyText(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return string.Empty;
+
+            var s = text.Trim();
+
+            // collapse whitespace
+            while (s.Contains("  ", StringComparison.Ordinal))
+                s = s.Replace("  ", " ", StringComparison.Ordinal);
+
+            return s;
+        }
+
         private static DateOnly ParseDate(string text)
         {
             text = text.Trim();
 
-            string[] fmts = new[]
+            string[] fmts =
             {
                 "M/d/yyyy", "MM/dd/yyyy",
                 "M/d/yy", "MM/dd/yy",
@@ -211,7 +224,8 @@ namespace eFinance.Importing
                     DateTimeStyles.AllowWhiteSpaces, out var dt))
                 return DateOnly.FromDateTime(dt);
 
-            if (DateTime.TryParse(text, CultureInfo.CurrentCulture, DateTimeStyles.AllowWhiteSpaces, out dt))
+            if (DateTime.TryParse(text, CultureInfo.CurrentCulture,
+                    DateTimeStyles.AllowWhiteSpaces, out dt))
                 return DateOnly.FromDateTime(dt);
 
             throw new FormatException($"Unrecognized date: '{text}'");
@@ -222,11 +236,13 @@ namespace eFinance.Importing
             text = text.Trim();
             text = text.Replace("$", "").Replace(",", "");
 
-            if (decimal.TryParse(text, NumberStyles.Number | NumberStyles.AllowLeadingSign | NumberStyles.AllowParentheses,
+            if (decimal.TryParse(text,
+                    NumberStyles.Number | NumberStyles.AllowLeadingSign | NumberStyles.AllowParentheses,
                     CultureInfo.InvariantCulture, out var d))
                 return d;
 
-            if (decimal.TryParse(text, NumberStyles.Number | NumberStyles.AllowLeadingSign | NumberStyles.AllowParentheses,
+            if (decimal.TryParse(text,
+                    NumberStyles.Number | NumberStyles.AllowLeadingSign | NumberStyles.AllowParentheses,
                     CultureInfo.CurrentCulture, out d))
                 return d;
 

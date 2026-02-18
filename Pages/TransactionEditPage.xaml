@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="eFinance.Pages.TransactionEditPage"
+             Title="Edit Transaction">
+
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="14">
+
+            <Label x:Name="HeaderLabel"
+                   Text="Transaction"
+                   FontSize="22"
+                   FontAttributes="Bold" />
+
+            <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="140,*" ColumnSpacing="12" RowSpacing="12">
+
+                <Label Grid.Row="0" Grid.Column="0" Text="Date" VerticalOptions="Center" />
+                <DatePicker Grid.Row="0" Grid.Column="1" x:Name="PostedDatePicker" />
+
+                <Label Grid.Row="1" Grid.Column="0" Text="Description" VerticalOptions="Center" />
+                <Entry Grid.Row="1" Grid.Column="1" x:Name="DescriptionEntry" Placeholder="Description" />
+
+                <Label Grid.Row="2" Grid.Column="0" Text="Amount" VerticalOptions="Center" />
+                <Entry Grid.Row="2" Grid.Column="1" x:Name="AmountEntry" Keyboard="Numeric" Placeholder="0.00" />
+
+                <Label Grid.Row="3" Grid.Column="0" Text="Category" VerticalOptions="Center" />
+                <Picker Grid.Row="3" Grid.Column="1" x:Name="CategoryPicker"
+                        Title="Select category" />
+            </Grid>
+
+            <HorizontalStackLayout Spacing="12" Margin="0,20,0,0">
+                <Button Text="Save"
+                        x:Name="SaveButton"
+                        BackgroundColor="LightGreen"
+                        TextColor="Black"
+                        Clicked="SaveButton_Clicked" />
+
+                <Button Text="Back"
+                        BackgroundColor="IndianRed"
+                        TextColor="White"
+                        Clicked="CancelButton_Clicked" />
+
+                <Button Text="Cancel"
+                        BackgroundColor="IndianRed"
+                        TextColor="White"
+                        Clicked="CancelButton_Clicked" />
+            </HorizontalStackLayout>
+
+            <Label x:Name="InfoLabel" TextColor="Gray" FontSize="12" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

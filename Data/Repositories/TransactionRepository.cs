@@ -158,6 +158,122 @@ ORDER BY t.PostedDate DESC, t.Id DESC;
             return results;
         }
 
+        // ------------------------------------------------------------
+        // QUERY BY ID
+        // ------------------------------------------------------------
+        public async Task<Transaction?> GetByIdAsync(long id)
+        {
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            cmd.CommandText = @"
+SELECT
+  t.Id,
+  t.AccountId,
+  t.PostedDate,
+  t.Description,
+  t.Amount,
+  t.Category,
+  t.CategoryId,
+  t.MatchedRuleId,
+  t.MatchedRulePattern,
+  t.CategorizedUtc,
+  t.FitId,
+  t.Source,
+  t.CreatedUtc
+FROM Transactions t
+WHERE t.Id = $id
+LIMIT 1;
+";
+            cmd.Parameters.AddWithValue("$id", id);
+
+            using var r = await cmd.ExecuteReaderAsync();
+            if (!await r.ReadAsync())
+                return null;
+
+            return new Transaction
+            {
+                Id = r.GetInt64(0),
+                AccountId = r.GetInt64(1),
+                PostedDate = DateOnly.Parse(r.GetString(2)),
+                Description = r.GetString(3),
+                Amount = (decimal)r.GetDouble(4),
+                Category = r.IsDBNull(5) ? null : r.GetString(5),
+                CategoryId = r.IsDBNull(6) ? null : r.GetInt64(6),
+                MatchedRuleId = r.IsDBNull(7) ? null : r.GetInt64(7),
+                MatchedRulePattern = r.IsDBNull(8) ? null : r.GetString(8),
+                CategorizedUtc = r.IsDBNull(9)
+                    ? null
+                    : DateTime.Parse(r.GetString(9), null, DateTimeStyles.RoundtripKind),
+                FitId = r.IsDBNull(10) ? null : r.GetString(10),
+                Source = r.IsDBNull(11) ? null : r.GetString(11),
+                CreatedUtc = DateTime.Parse(r.GetString(12), null, DateTimeStyles.RoundtripKind)
+            };
+        }
+
+        // ------------------------------------------------------------
+        // UPDATE (Does NOT touch FitId/Source/CreatedUtc/AccountId)
+        // ------------------------------------------------------------
+        public async Task<bool> UpdateAsync(Transaction t)
+        {
+            if (t.Id <= 0)
+                throw new ArgumentOutOfRangeException(nameof(t.Id), "Transaction.Id must be set for update.");
+
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            cmd.CommandText = @"
+UPDATE Transactions
+SET
+  PostedDate = $postedDate,
+  Description = $desc,
+  Amount = $amount,
+  Category = $cat,
+  CategoryId = $categoryId,
+  MatchedRuleId = $matchedRuleId,
+  MatchedRulePattern = $matchedRulePattern,
+  CategorizedUtc = $categorizedUtc
+WHERE Id = $id;
+SELECT changes();
+";
+
+            cmd.Parameters.AddWithValue("$id", t.Id);
+            cmd.Parameters.AddWithValue("$postedDate", t.PostedDate.ToString("yyyy-MM-dd"));
+            cmd.Parameters.AddWithValue("$desc", t.Description);
+            cmd.Parameters.AddWithValue("$amount", (double)t.Amount);
+            cmd.Parameters.AddWithValue("$cat", (object?)t.Category ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$categoryId", (object?)t.CategoryId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$matchedRuleId", (object?)t.MatchedRuleId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$matchedRulePattern", (object?)t.MatchedRulePattern ?? DBNull.Value);
+            cmd.Parameters.AddWithValue(
+                "$categorizedUtc",
+                t.CategorizedUtc is null
+                    ? DBNull.Value
+                    : t.CategorizedUtc.Value.ToString("O"));
+
+            var changed = (long)(await cmd.ExecuteScalarAsync() ?? 0L);
+            return changed > 0;
+        }
+
+        // ------------------------------------------------------------
+        // DELETE
+        // ------------------------------------------------------------
+        public async Task<bool> DeleteByIdAsync(long id)
+        {
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            cmd.CommandText = @"
+DELETE FROM Transactions
+WHERE Id = $id;
+SELECT changes();
+";
+            cmd.Parameters.AddWithValue("$id", id);
+
+            var changed = (long)(await cmd.ExecuteScalarAsync() ?? 0L);
+            return changed > 0;
+        }
+
         private static void BindParameters(SqliteCommand cmd, Transaction t)
         {
             cmd.Parameters.AddWithValue("$accountId", t.AccountId);
