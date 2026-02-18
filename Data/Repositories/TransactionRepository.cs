@@ -2,12 +2,13 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Threading.Tasks;
 using eFinance.Data.Models;
 
 namespace eFinance.Data.Repositories
 {
-    public sealed class TransactionRepository
+    public sealed partial class TransactionRepository
     {
         private readonly SqliteDatabase _db;
 
@@ -69,6 +70,142 @@ SELECT changes();
             }
 
             return false;
+        }
+
+        // ------------------------------------------------------------
+        // NEW: EXISTS (by ANY FitId)
+        // Backwards-compat support: check legacy FitId(s) + new FitId(s)
+        // ------------------------------------------------------------
+        public async Task<bool> ExistsByAnyFitIdAsync(params string[] fitIds)
+        {
+            if (fitIds is null || fitIds.Length == 0)
+                return false;
+
+            // Clean list: remove null/empty, distinct (case-sensitive, as stored)
+            var cleaned = fitIds
+                .Where(f => !string.IsNullOrWhiteSpace(f))
+                .Distinct()
+                .ToArray();
+
+            if (cleaned.Length == 0)
+                return false;
+
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            // IN ($p0, $p1, ...)
+            var paramNames = new string[cleaned.Length];
+            for (int i = 0; i < cleaned.Length; i++)
+            {
+                paramNames[i] = $"$p{i}";
+                cmd.Parameters.AddWithValue(paramNames[i], cleaned[i]);
+            }
+
+            cmd.CommandText = $@"
+SELECT 1
+FROM Transactions
+WHERE FitId IN ({string.Join(",", paramNames)})
+LIMIT 1;
+";
+
+            var result = await cmd.ExecuteScalarAsync();
+            return result is not null && result != DBNull.Value;
+        }
+
+        // ------------------------------------------------------------
+        // NEW: INSERT OR IGNORE (by ANY FitId)
+        // - Checks: Transaction.FitId + additionalFitIdsToCheck
+        // - If any already exists, SKIPS insert (prevents legacy vs new duplicates)
+        // Returns true if inserted, false if skipped.
+        // ------------------------------------------------------------
+        public async Task<bool> InsertOrIgnoreByAnyFitIdsAsync(
+            Transaction t,
+            params string[] additionalFitIdsToCheck)
+        {
+            if (t is null) throw new ArgumentNullException(nameof(t));
+
+            var toCheck = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(t.FitId))
+                toCheck.Add(t.FitId!);
+
+            if (additionalFitIdsToCheck is not null && additionalFitIdsToCheck.Length > 0)
+            {
+                foreach (var f in additionalFitIdsToCheck)
+                {
+                    if (!string.IsNullOrWhiteSpace(f) && !toCheck.Contains(f))
+                        toCheck.Add(f);
+                }
+            }
+
+            // If nothing to check, fall back to single-FitId behavior
+            if (toCheck.Count == 0)
+                return await InsertOrIgnoreByFitIdAsync(t);
+
+            using var conn = _db.OpenConnection();
+
+            // Keep check+insert together to reduce race risk
+            using var tx = conn.BeginTransaction();
+
+            // 1) Check for ANY existing FitId
+            using (var existsCmd = conn.CreateCommand())
+            {
+                existsCmd.Transaction = tx;
+
+                var paramNames = new string[toCheck.Count];
+                for (int i = 0; i < toCheck.Count; i++)
+                {
+                    paramNames[i] = $"$p{i}";
+                    existsCmd.Parameters.AddWithValue(paramNames[i], toCheck[i]);
+                }
+
+                existsCmd.CommandText = $@"
+SELECT 1
+FROM Transactions
+WHERE FitId IN ({string.Join(",", paramNames)})
+LIMIT 1;
+";
+
+                var exists = await existsCmd.ExecuteScalarAsync();
+                if (exists is not null && exists != DBNull.Value)
+                {
+                    tx.Rollback();
+                    return false; // duplicate (either legacy or new)
+                }
+            }
+
+            // 2) Insert OR IGNORE using Transaction.FitId (normally your new V2)
+            using (var insertCmd = conn.CreateCommand())
+            {
+                insertCmd.Transaction = tx;
+
+                insertCmd.CommandText = @"
+INSERT OR IGNORE INTO Transactions
+(AccountId, PostedDate, Description, Amount, Category, CategoryId, MatchedRuleId, MatchedRulePattern, CategorizedUtc, FitId, Source, CreatedUtc)
+VALUES
+($accountId, $postedDate, $desc, $amount, $cat, $categoryId, $matchedRuleId, $matchedRulePattern, $categorizedUtc, $fitId, $source, $createdUtc);
+SELECT changes();
+";
+
+                BindParameters(insertCmd, t);
+
+                var changed = (long)(await insertCmd.ExecuteScalarAsync() ?? 0L);
+
+                if (changed > 0)
+                {
+                    using var idCmd = conn.CreateCommand();
+                    idCmd.Transaction = tx;
+                    idCmd.CommandText = "SELECT last_insert_rowid();";
+                    t.Id = (long)(await idCmd.ExecuteScalarAsync() ?? 0L);
+
+                    tx.Commit();
+                    return true;
+                }
+
+                // If ignored, it means Transaction.FitId already exists (rare given precheck)
+                tx.Commit();
+                return false;
+            }
         }
 
         // ------------------------------------------------------------
