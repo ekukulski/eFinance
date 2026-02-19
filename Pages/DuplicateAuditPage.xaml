@@ -2,38 +2,44 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="eFinance.Pages.DuplicateAuditPage"
+             x:Name="RootPage"
              Title="Duplicate Audit">
 
     <ScrollView>
         <VerticalStackLayout Padding="20" Spacing="12">
 
+            <!-- Return -->
             <Button Text="Return"
-                    BackgroundColor="IndianRed"
-                    TextColor="White"
                     FontSize="16"
                     WidthRequest="220"
                     HorizontalOptions="Start"
-                    Clicked="ReturnClicked" />
-            
+                    CornerRadius="8"
+                    Style="{StaticResource ReturnButtonStyle}"
+                    Command="{Binding ReturnCommand}" />
+
             <Label Text="Duplicate Audit"
                    FontSize="22"
-                   FontAttributes="Bold"/>
+                   FontAttributes="Bold" />
 
+            <!-- Run audit -->
             <Button Text="Run Duplicate Audit"
-                    BackgroundColor="DarkSeaGreen"
-                    TextColor="Black"
                     FontSize="18"
                     WidthRequest="220"
                     HorizontalOptions="Start"
                     CornerRadius="8"
-                    Clicked="RunClicked" />
+                    Style="{StaticResource SuccessButtonStyle}"
+                    Command="{Binding RunAuditCommand}" />
 
-            <Label x:Name="SummaryLabel" />
+            <!-- Summary -->
+            <Label Text="{Binding SummaryText}" />
 
-            <CollectionView x:Name="ResultsView">
+            <!-- Results -->
+            <CollectionView ItemsSource="{Binding Results}">
                 <CollectionView.ItemTemplate>
                     <DataTemplate>
-                        <Frame BorderColor="LightGray" Padding="10" Margin="0,6">
+                        <Frame Padding="10"
+                               Margin="0,6">
+
                             <VerticalStackLayout Spacing="4">
                                 <Label Text="{Binding AccountName}" FontAttributes="Bold"/>
                                 <Label Text="{Binding Type}" />
@@ -49,15 +55,37 @@
                                 <Label Text="{Binding B_Description}" />
                                 <Label Text="{Binding B_Amount}" />
 
-                                <Button Text="Accept (Not a Duplicate)"
-                                        BackgroundColor="CornflowerBlue"
-                                        TextColor="White"
-                                        FontSize="16"
-                                        WidthRequest="220"
-                                        HorizontalOptions="Start"
-                                        CornerRadius="8"
-                                        Clicked="AcceptClicked"
-                                        CommandParameter="{Binding}" />
+                                <HorizontalStackLayout Spacing="12">
+
+                                    <!-- IMPORTANT: command is on the page VM, item is the parameter -->
+                                    <Button Text="Keep Top (Soft Delete Bottom)"
+                                            FontSize="16"
+                                            WidthRequest="260"
+                                            HorizontalOptions="Start"
+                                            CornerRadius="8"
+                                            Style="{StaticResource DangerButtonStyle}"
+                                            Command="{Binding BindingContext.KeepTopCommand, Source={x:Reference RootPage}}"
+                                            CommandParameter="{Binding}" />
+
+                                    <Button Text="Keep Bottom (Soft Delete Top)"
+                                            FontSize="16"
+                                            WidthRequest="260"
+                                            HorizontalOptions="Start"
+                                            CornerRadius="8"
+                                            Style="{StaticResource WarningButtonStyle}"
+                                            Command="{Binding BindingContext.KeepBottomCommand, Source={x:Reference RootPage}}"
+                                            CommandParameter="{Binding}" />
+
+                                    <Button Text="Accept (Not a Duplicate)"
+                                            FontSize="16"
+                                            WidthRequest="220"
+                                            HorizontalOptions="Start"
+                                            CornerRadius="8"
+                                            Style="{StaticResource InfoButtonStyle}"
+                                            Command="{Binding BindingContext.AcceptCommand, Source={x:Reference RootPage}}"
+                                            CommandParameter="{Binding}" />
+
+                                </HorizontalStackLayout>
 
                             </VerticalStackLayout>
                         </Frame>

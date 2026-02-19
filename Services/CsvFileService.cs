@@ -1,6 +1,6 @@
-﻿using CsvHelper;
+﻿using System.Globalization;
+using CsvHelper;
 using CsvHelper.Configuration;
-using System.Globalization;
 
 namespace eFinance.Services;
 

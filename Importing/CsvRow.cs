@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace eFinance.Importing
+﻿namespace eFinance.Importing
 {
     public sealed class CsvRow
     {

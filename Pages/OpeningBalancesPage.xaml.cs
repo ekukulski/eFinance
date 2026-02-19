@@ -1,10 +1,4 @@
-using Microsoft.Maui.Controls;
 using System.Collections.ObjectModel;
-using System.IO;
-using System.Linq;
-using eFinance.Constants;
-using eFinance.Pages;
-using eFinance.Services;
 
 namespace eFinance.Pages
 {

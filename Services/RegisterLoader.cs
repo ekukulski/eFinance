@@ -1,6 +1,4 @@
-﻿using System.IO;
-
-namespace eFinance.Services;
+﻿namespace eFinance.Services;
 
 public static class RegisterLoader
 {

@@ -6,5 +6,7 @@
         public int NearDuplicateDateWindowDays { get; init; } = 3;
         public double SimilarityThreshold { get; init; } = 0.78;
         public int MaxResults { get; init; } = 200;
+        public bool RequireExactAmountMatch { get; set; } = false;
+
     }
 }

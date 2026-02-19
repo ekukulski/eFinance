@@ -1,6 +1,4 @@
-﻿using System.Threading.Tasks;
-
-namespace eFinance.Importing
+﻿namespace eFinance.Importing
 {
     public interface IImporter
     {

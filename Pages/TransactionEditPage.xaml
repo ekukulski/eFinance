@@ -2,77 +2,102 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="eFinance.Pages.TransactionEditPage"
-             Title="Edit Transaction">
-
+             Title="{Binding Title}">
 
     <ScrollView>
         <VerticalStackLayout Padding="20" Spacing="14">
 
-            <Label x:Name="HeaderLabel"
-                   Text="Transaction"
+            <!-- Header -->
+            <Label Text="{Binding Header}"
                    FontSize="22"
                    FontAttributes="Bold" />
 
-            <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="140,*" ColumnSpacing="12" RowSpacing="12">
+            <!-- Fields -->
+            <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                  ColumnDefinitions="140,*"
+                  ColumnSpacing="12"
+                  RowSpacing="12">
 
-                <Label Grid.Row="0" Grid.Column="0" Text="Date" VerticalOptions="Center" />
-                <DatePicker Grid.Row="0" Grid.Column="1" x:Name="PostedDatePicker" />
+                <Label Grid.Row="0" Grid.Column="0"
+                       Text="Date"
+                       VerticalOptions="Center" />
 
-                <Label Grid.Row="1" Grid.Column="0" Text="Description" VerticalOptions="Center" />
-                <Entry Grid.Row="1" Grid.Column="1" x:Name="DescriptionEntry" Placeholder="Description" />
+                <DatePicker Grid.Row="0" Grid.Column="1"
+                            Date="{Binding PostedDate}" />
 
-                <Label Grid.Row="2" Grid.Column="0" Text="Amount" VerticalOptions="Center" />
-                <Entry Grid.Row="2" Grid.Column="1" x:Name="AmountEntry" Keyboard="Numeric" Placeholder="0.00" />
+                <Label Grid.Row="1" Grid.Column="0"
+                       Text="Description"
+                       VerticalOptions="Center" />
 
-                <Label Grid.Row="3" Grid.Column="0" Text="Category" VerticalOptions="Center" />
-                <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                    <Picker Grid.Column="0" x:Name="CategoryPicker"
-                            Title="Select category" />
-                    <Button Grid.Column="1"
-                            Text="+ Add"
-                            Padding="10,0"
-                            BackgroundColor="DarkSeaGreen"
-                            TextColor="Black"
-                            FontAttributes="Bold"
-                            Clicked="AddCategoryButton_Clicked" />
-                </Grid>
+                <Entry Grid.Row="1" Grid.Column="1"
+                       Text="{Binding Description}"
+                       Placeholder="Description" />
+
+                <Label Grid.Row="2" Grid.Column="0"
+                       Text="Amount"
+                       VerticalOptions="Center" />
+
+                <Entry Grid.Row="2" Grid.Column="1"
+                       Text="{Binding AmountText}"
+                       Keyboard="Numeric"
+                       Placeholder="0.00" />
+
+                <Label Grid.Row="3" Grid.Column="0"
+                       Text="Category"
+                       VerticalOptions="Center" />
+
+                <Picker Grid.Row="3" Grid.Column="1"
+                        Title="Select category"
+                        ItemsSource="{Binding CategoryItems}"
+                        ItemDisplayBinding="{Binding Name}"
+                        SelectedItem="{Binding SelectedCategory}" />
+
+                <Label Grid.Row="4" Grid.Column="0"
+                       Text="Memo"
+                       VerticalOptions="Center" />
+
+                <Entry Grid.Row="4" Grid.Column="1"
+                       Text="{Binding Memo}"
+                       Placeholder="Memo (optional)" />
             </Grid>
 
+            <!-- Optional: leave in UI but disable until implemented -->
             <Button Text="Create Rule"
-                    x:Name="CreateRuleButton"
-                    BackgroundColor="DarkSeaGreen"
-                    TextColor="Black"
+                    Style="{StaticResource NeutralButtonStyle}"
                     FontAttributes="Bold"
-                    Clicked="CreateRuleButton_Clicked"
+                    IsEnabled="False"
+                    Opacity="0.55"
                     Margin="0,4,0,0" />
 
-            <HorizontalStackLayout Spacing="12" Margin="0,20,0,0" HorizontalOptions="FillAndExpand">
+            <!-- Action buttons -->
+            <HorizontalStackLayout Spacing="12"
+                                   Margin="0,20,0,0"
+                                   HorizontalOptions="FillAndExpand">
 
                 <Button Text="Save"
-                        x:Name="SaveButton"
-                        BackgroundColor="LightGreen"
-                        TextColor="Black"
+                        Style="{StaticResource SuccessButtonStyle}"
                         FontAttributes="Bold"
-                        Clicked="SaveButton_Clicked"
+                        Command="{Binding SaveCommand}"
                         HorizontalOptions="StartAndExpand" />
 
                 <Button Text="Cancel"
-                        BackgroundColor="CornflowerBlue"
-                        TextColor="Black"
+                        Style="{StaticResource NeutralButtonStyle}"
                         FontAttributes="Bold"
-                        Clicked="CancelButton_Clicked"
+                        Command="{Binding CancelCommand}"
                         HorizontalOptions="CenterAndExpand" />
 
                 <Button Text="Return"
-                        BackgroundColor="IndianRed"
-                        TextColor="Black"
+                        Style="{StaticResource ReturnButtonStyle}"
                         FontAttributes="Bold"
-                        Clicked="ReturnButton_Clicked"
+                        Command="{Binding CancelCommand}"
                         HorizontalOptions="End" />
-
             </HorizontalStackLayout>
 
-            <Label x:Name="InfoLabel" TextColor="Gray" FontSize="12" />
+            <!-- Optional info line -->
+            <Label Text=""
+                   TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}"
+                   FontSize="12" />
+
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

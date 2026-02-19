@@ -1,13 +1,26 @@
-﻿using Microsoft.Data.Sqlite;
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
-using System.Threading.Tasks;
+﻿using System.Globalization;
 using eFinance.Data.Models;
+using Microsoft.Data.Sqlite;
 
 namespace eFinance.Data.Repositories
 {
+    /// <summary>
+    /// Account-agnostic transaction repository.
+    /// - Register UI always queries by AccountId.
+    /// - Importers parse bank-specific formats into Transaction objects
+    ///   and then call InsertTransactionsAsync(accountId, txns).
+    ///
+    /// NOTE:
+    /// INSERT OR IGNORE requires a UNIQUE constraint to be meaningful.
+    /// Recommended: UNIQUE(AccountId, FitId) where FitId is present.
+    ///
+    /// Soft delete:
+    /// - Transactions have IsDeleted INTEGER NOT NULL DEFAULT 0
+    /// - SoftDeleteAsync sets IsDeleted = 1
+    /// - GetTransactionsAsync excludes deleted rows by default
+    /// - GetDeletedTransactionsAsync returns only deleted rows
+    /// - RestoreAsync / RestoreAllForAccountAsync revert IsDeleted to 0
+    /// </summary>
     public sealed partial class TransactionRepository
     {
         private readonly SqliteDatabase _db;
@@ -17,22 +30,305 @@ namespace eFinance.Data.Repositories
             _db = db ?? throw new ArgumentNullException(nameof(db));
         }
 
-        // ------------------------------------------------------------
-        // STANDARD INSERT (will throw on unique constraint violation)
-        // ------------------------------------------------------------
-        public async Task<long> InsertAsync(Transaction t)
+        // ============================================================
+        // Phase 1: Account-agnostic APIs
+        // ============================================================
+
+        /// <summary>
+        /// Get transactions for an account, optionally filtered by date range.
+        /// Dates are inclusive. Results are sorted newest-first (PostedDate DESC, Id DESC).
+        ///
+        /// IMPORTANT:
+        /// By default, soft-deleted rows are excluded (IsDeleted = 0).
+        /// </summary>
+        public async Task<IReadOnlyList<Transaction>> GetTransactionsAsync(
+            long accountId,
+            DateOnly? from = null,
+            DateOnly? to = null,
+            int? take = null,
+            bool includeDeleted = false)
+        {
+            if (accountId <= 0) throw new ArgumentOutOfRangeException(nameof(accountId));
+
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            var where = "t.AccountId = $accountId";
+            cmd.Parameters.AddWithValue("$accountId", accountId);
+
+            if (!includeDeleted)
+                where += " AND t.IsDeleted = 0";
+
+            if (from is not null)
+            {
+                where += " AND t.PostedDate >= $from";
+                cmd.Parameters.AddWithValue("$from", from.Value.ToString("yyyy-MM-dd"));
+            }
+
+            if (to is not null)
+            {
+                where += " AND t.PostedDate <= $to";
+                cmd.Parameters.AddWithValue("$to", to.Value.ToString("yyyy-MM-dd"));
+            }
+
+            var limitSql = "";
+            if (take is not null && take.Value > 0)
+            {
+                limitSql = "LIMIT $take";
+                cmd.Parameters.AddWithValue("$take", take.Value);
+            }
+
+            cmd.CommandText = $@"
+SELECT
+  t.Id,
+  t.AccountId,
+  t.PostedDate,
+  t.Description,
+  t.Amount,
+
+  -- Display category name:
+  -- Prefer legacy Transactions.Category if non-empty, else Categories.Name
+  COALESCE(NULLIF(TRIM(t.Category), ''), c.Name) AS Category,
+
+  t.CategoryId,
+  t.MatchedRuleId,
+  t.MatchedRulePattern,
+  t.CategorizedUtc,
+  t.FitId,
+  t.Source,
+  t.CreatedUtc
+FROM Transactions t
+LEFT JOIN Categories c ON c.Id = t.CategoryId
+WHERE {where}
+ORDER BY t.PostedDate DESC, t.Id DESC
+{limitSql};
+";
+
+            var results = new List<Transaction>();
+            using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+                results.Add(ReadTransactionWithCategoryJoin(r));
+
+            return results;
+        }
+
+        /// <summary>
+        /// Gets deleted (soft-deleted) transactions for an account.
+        /// Sorted newest-first.
+        /// </summary>
+        public async Task<IReadOnlyList<Transaction>> GetDeletedTransactionsAsync(long accountId, int? take = null)
+        {
+            if (accountId <= 0) throw new ArgumentOutOfRangeException(nameof(accountId));
+
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            cmd.Parameters.AddWithValue("$accountId", accountId);
+
+            var limitSql = "";
+            if (take is not null && take.Value > 0)
+            {
+                limitSql = "LIMIT $take";
+                cmd.Parameters.AddWithValue("$take", take.Value);
+            }
+
+            cmd.CommandText = $@"
+SELECT
+  t.Id,
+  t.AccountId,
+  t.PostedDate,
+  t.Description,
+  t.Amount,
+
+  COALESCE(NULLIF(TRIM(t.Category), ''), c.Name) AS Category,
+
+  t.CategoryId,
+  t.MatchedRuleId,
+  t.MatchedRulePattern,
+  t.CategorizedUtc,
+  t.FitId,
+  t.Source,
+  t.CreatedUtc
+FROM Transactions t
+LEFT JOIN Categories c ON c.Id = t.CategoryId
+WHERE t.AccountId = $accountId
+  AND t.IsDeleted = 1
+ORDER BY t.PostedDate DESC, t.Id DESC
+{limitSql};
+";
+
+            var results = new List<Transaction>();
+            using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+                results.Add(ReadTransactionWithCategoryJoin(r));
+
+            return results;
+        }
+
+        /// <summary>
+        /// Restores a soft-deleted transaction (IsDeleted=1 -> 0).
+        /// </summary>
+        public async Task RestoreAsync(long id)
         {
             using var conn = _db.OpenConnection();
             using var cmd = conn.CreateCommand();
 
             cmd.CommandText = @"
-INSERT INTO Transactions
-(AccountId, PostedDate, Description, Amount, Category, CategoryId, MatchedRuleId, MatchedRulePattern, CategorizedUtc, FitId, Source, CreatedUtc)
+UPDATE Transactions
+SET IsDeleted = 0
+WHERE Id = $id;
+";
+            cmd.Parameters.AddWithValue("$id", id);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        /// <summary>
+        /// Restores all soft-deleted transactions for an account.
+        /// </summary>
+        public async Task RestoreAllForAccountAsync(long accountId)
+        {
+            if (accountId <= 0) throw new ArgumentOutOfRangeException(nameof(accountId));
+
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            cmd.CommandText = @"
+UPDATE Transactions
+SET IsDeleted = 0
+WHERE AccountId = $accountId
+  AND IsDeleted = 1;
+";
+            cmd.Parameters.AddWithValue("$accountId", accountId);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        /// <summary>
+        /// OPTIONAL (recommended):
+        /// If you import a transaction that already exists but is soft-deleted, restore it.
+        /// Returns number of rows restored (0 or 1).
+        /// </summary>
+        public async Task<int> RestoreIfDeletedByFitIdAsync(long accountId, string fitId)
+        {
+            if (accountId <= 0) throw new ArgumentOutOfRangeException(nameof(accountId));
+            if (string.IsNullOrWhiteSpace(fitId)) return 0;
+
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            cmd.CommandText = @"
+UPDATE Transactions
+SET IsDeleted = 0
+WHERE AccountId = $accountId
+  AND FitId = $fitId
+  AND IsDeleted = 1;
+SELECT changes();
+";
+            cmd.Parameters.AddWithValue("$accountId", accountId);
+            cmd.Parameters.AddWithValue("$fitId", fitId.Trim());
+
+            var changed = (long)(await cmd.ExecuteScalarAsync() ?? 0L);
+            return (int)changed;
+        }
+
+        /// <summary>
+        /// Inserts a batch for a specific account using INSERT OR IGNORE.
+        /// Returns the number of rows inserted (duplicates ignored).
+        ///
+        /// IMPORTANT:
+        /// Requires UNIQUE(AccountId, FitId) (or another de-dupe key) for IGNORE to work.
+        /// </summary>
+        public async Task<int> InsertTransactionsAsync(long accountId, IEnumerable<Transaction> transactions)
+        {
+            if (accountId <= 0) throw new ArgumentOutOfRangeException(nameof(accountId));
+            if (transactions is null) throw new ArgumentNullException(nameof(transactions));
+
+            var list = transactions as IList<Transaction> ?? transactions.ToList();
+            if (list.Count == 0) return 0;
+
+            using var conn = _db.OpenConnection();
+            using var tx = conn.BeginTransaction();
+
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+
+            cmd.CommandText = @"
+INSERT OR IGNORE INTO Transactions
+(AccountId, PostedDate, Description, Amount, Category, CategoryId, Memo, MatchedRuleId, MatchedRulePattern, CategorizedUtc, FitId, Source, CreatedUtc)
 VALUES
-($accountId, $postedDate, $desc, $amount, $cat, $categoryId, $matchedRuleId, $matchedRulePattern, $categorizedUtc, $fitId, $source, $createdUtc);
-SELECT last_insert_rowid();
+($accountId, $postedDate, $desc, $amount, $cat, $categoryId, $memo, $matchedRuleId, $matchedRulePattern, $categorizedUtc, $fitId, $source, $createdUtc);
 ";
 
+            var pAccountId = cmd.CreateParameter(); pAccountId.ParameterName = "$accountId"; cmd.Parameters.Add(pAccountId);
+            var pPostedDate = cmd.CreateParameter(); pPostedDate.ParameterName = "$postedDate"; cmd.Parameters.Add(pPostedDate);
+            var pDesc = cmd.CreateParameter(); pDesc.ParameterName = "$desc"; cmd.Parameters.Add(pDesc);
+            var pAmount = cmd.CreateParameter(); pAmount.ParameterName = "$amount"; cmd.Parameters.Add(pAmount);
+            var pCat = cmd.CreateParameter(); pCat.ParameterName = "$cat"; cmd.Parameters.Add(pCat);
+            var pCategoryId = cmd.CreateParameter(); pCategoryId.ParameterName = "$categoryId"; cmd.Parameters.Add(pCategoryId);
+            var pMemo = cmd.CreateParameter(); pMemo.ParameterName = "$memo"; cmd.Parameters.Add(pMemo);
+            var pMatchedRuleId = cmd.CreateParameter(); pMatchedRuleId.ParameterName = "$matchedRuleId"; cmd.Parameters.Add(pMatchedRuleId);
+            var pMatchedRulePattern = cmd.CreateParameter(); pMatchedRulePattern.ParameterName = "$matchedRulePattern"; cmd.Parameters.Add(pMatchedRulePattern);
+            var pCategorizedUtc = cmd.CreateParameter(); pCategorizedUtc.ParameterName = "$categorizedUtc"; cmd.Parameters.Add(pCategorizedUtc);
+            var pFitId = cmd.CreateParameter(); pFitId.ParameterName = "$fitId"; cmd.Parameters.Add(pFitId);
+            var pSource = cmd.CreateParameter(); pSource.ParameterName = "$source"; cmd.Parameters.Add(pSource);
+            var pCreatedUtc = cmd.CreateParameter(); pCreatedUtc.ParameterName = "$createdUtc"; cmd.Parameters.Add(pCreatedUtc);
+
+            int inserted = 0;
+
+            foreach (var t in list)
+            {
+                if (t is null) continue;
+
+                t.AccountId = accountId;
+
+                if (t.CreatedUtc == default)
+                    t.CreatedUtc = DateTime.UtcNow;
+
+                pAccountId.Value = t.AccountId;
+                pPostedDate.Value = t.PostedDate.ToString("yyyy-MM-dd");
+                pDesc.Value = t.Description ?? string.Empty;
+                pAmount.Value = (double)t.Amount;
+
+                pCat.Value = (object?)t.Category ?? DBNull.Value;
+                pCategoryId.Value = (object?)t.CategoryId ?? DBNull.Value;
+                pMemo.Value = (object?)t.Memo ?? DBNull.Value;
+                pMatchedRuleId.Value = (object?)t.MatchedRuleId ?? DBNull.Value;
+                pMatchedRulePattern.Value = (object?)t.MatchedRulePattern ?? DBNull.Value;
+                pCategorizedUtc.Value = t.CategorizedUtc is null ? DBNull.Value : t.CategorizedUtc.Value.ToString("O");
+
+                pFitId.Value = (object?)t.FitId ?? DBNull.Value;
+                pSource.Value = (object?)t.Source ?? DBNull.Value;
+
+                if (t.CreatedUtc.HasValue)
+                    pCreatedUtc.Value = t.CreatedUtc.Value.ToString("O");
+                else
+                    pCreatedUtc.Value = DBNull.Value;
+
+                inserted += await cmd.ExecuteNonQueryAsync();
+            }
+
+            tx.Commit();
+            return inserted;
+        }
+
+        // ============================================================
+        // Existing APIs (kept for compatibility)
+        // ============================================================
+
+        public async Task<long> InsertAsync(Transaction t)
+        {
+            if (t is null) throw new ArgumentNullException(nameof(t));
+            if (t.AccountId <= 0) throw new ArgumentOutOfRangeException(nameof(t.AccountId));
+
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            cmd.CommandText = @"
+INSERT INTO Transactions
+(AccountId, PostedDate, Description, Amount, Category, CategoryId, Memo, MatchedRuleId, MatchedRulePattern, CategorizedUtc, FitId, Source, CreatedUtc)
+VALUES
+($accountId, $postedDate, $desc, $amount, $cat, $categoryId, $memo, $matchedRuleId, $matchedRulePattern, $categorizedUtc, $fitId, $source, $createdUtc);
+SELECT last_insert_rowid();
+";
             BindParameters(cmd, t);
 
             var id = (long)(await cmd.ExecuteScalarAsync() ?? 0L);
@@ -40,27 +336,24 @@ SELECT last_insert_rowid();
             return id;
         }
 
-        // ------------------------------------------------------------
-        // INSERT OR IGNORE (Safe for Import Pipeline)
-        // Returns true if inserted, false if ignored (duplicate FitId)
-        // ------------------------------------------------------------
         public async Task<bool> InsertOrIgnoreByFitIdAsync(Transaction t)
         {
+            if (t is null) throw new ArgumentNullException(nameof(t));
+            if (t.AccountId <= 0) throw new ArgumentOutOfRangeException(nameof(t.AccountId));
+
             using var conn = _db.OpenConnection();
             using var cmd = conn.CreateCommand();
 
             cmd.CommandText = @"
 INSERT OR IGNORE INTO Transactions
-(AccountId, PostedDate, Description, Amount, Category, CategoryId, MatchedRuleId, MatchedRulePattern, CategorizedUtc, FitId, Source, CreatedUtc)
+(AccountId, PostedDate, Description, Amount, Category, CategoryId, Memo, MatchedRuleId, MatchedRulePattern, CategorizedUtc, FitId, Source, CreatedUtc)
 VALUES
-($accountId, $postedDate, $desc, $amount, $cat, $categoryId, $matchedRuleId, $matchedRulePattern, $categorizedUtc, $fitId, $source, $createdUtc);
+($accountId, $postedDate, $desc, $amount, $cat, $categoryId, $memo, $matchedRuleId, $matchedRulePattern, $categorizedUtc, $fitId, $source, $createdUtc);
 SELECT changes();
 ";
-
             BindParameters(cmd, t);
 
             var changed = (long)(await cmd.ExecuteScalarAsync() ?? 0L);
-
             if (changed > 0)
             {
                 using var idCmd = conn.CreateCommand();
@@ -72,16 +365,11 @@ SELECT changes();
             return false;
         }
 
-        // ------------------------------------------------------------
-        // NEW: EXISTS (by ANY FitId)
-        // Backwards-compat support: check legacy FitId(s) + new FitId(s)
-        // ------------------------------------------------------------
         public async Task<bool> ExistsByAnyFitIdAsync(params string[] fitIds)
         {
             if (fitIds is null || fitIds.Length == 0)
                 return false;
 
-            // Clean list: remove null/empty, distinct (case-sensitive, as stored)
             var cleaned = fitIds
                 .Where(f => !string.IsNullOrWhiteSpace(f))
                 .Distinct()
@@ -93,7 +381,6 @@ SELECT changes();
             using var conn = _db.OpenConnection();
             using var cmd = conn.CreateCommand();
 
-            // IN ($p0, $p1, ...)
             var paramNames = new string[cleaned.Length];
             for (int i = 0; i < cleaned.Length; i++)
             {
@@ -107,22 +394,14 @@ FROM Transactions
 WHERE FitId IN ({string.Join(",", paramNames)})
 LIMIT 1;
 ";
-
             var result = await cmd.ExecuteScalarAsync();
             return result is not null && result != DBNull.Value;
         }
 
-        // ------------------------------------------------------------
-        // NEW: INSERT OR IGNORE (by ANY FitId)
-        // - Checks: Transaction.FitId + additionalFitIdsToCheck
-        // - If any already exists, SKIPS insert (prevents legacy vs new duplicates)
-        // Returns true if inserted, false if skipped.
-        // ------------------------------------------------------------
-        public async Task<bool> InsertOrIgnoreByAnyFitIdsAsync(
-            Transaction t,
-            params string[] additionalFitIdsToCheck)
+        public async Task<bool> InsertOrIgnoreByAnyFitIdsAsync(Transaction t, params string[] additionalFitIdsToCheck)
         {
             if (t is null) throw new ArgumentNullException(nameof(t));
+            if (t.AccountId <= 0) throw new ArgumentOutOfRangeException(nameof(t.AccountId));
 
             var toCheck = new List<string>();
 
@@ -138,16 +417,12 @@ LIMIT 1;
                 }
             }
 
-            // If nothing to check, fall back to single-FitId behavior
             if (toCheck.Count == 0)
                 return await InsertOrIgnoreByFitIdAsync(t);
 
             using var conn = _db.OpenConnection();
-
-            // Keep check+insert together to reduce race risk
             using var tx = conn.BeginTransaction();
 
-            // 1) Check for ANY existing FitId
             using (var existsCmd = conn.CreateCommand())
             {
                 existsCmd.Transaction = tx;
@@ -165,16 +440,14 @@ FROM Transactions
 WHERE FitId IN ({string.Join(",", paramNames)})
 LIMIT 1;
 ";
-
                 var exists = await existsCmd.ExecuteScalarAsync();
                 if (exists is not null && exists != DBNull.Value)
                 {
                     tx.Rollback();
-                    return false; // duplicate (either legacy or new)
+                    return false;
                 }
             }
 
-            // 2) Insert OR IGNORE using Transaction.FitId (normally your new V2)
             using (var insertCmd = conn.CreateCommand())
             {
                 insertCmd.Transaction = tx;
@@ -186,11 +459,9 @@ VALUES
 ($accountId, $postedDate, $desc, $amount, $cat, $categoryId, $matchedRuleId, $matchedRulePattern, $categorizedUtc, $fitId, $source, $createdUtc);
 SELECT changes();
 ";
-
                 BindParameters(insertCmd, t);
 
                 var changed = (long)(await insertCmd.ExecuteScalarAsync() ?? 0L);
-
                 if (changed > 0)
                 {
                     using var idCmd = conn.CreateCommand();
@@ -202,124 +473,36 @@ SELECT changes();
                     return true;
                 }
 
-                // If ignored, it means Transaction.FitId already exists (rare given precheck)
                 tx.Commit();
                 return false;
             }
         }
 
-        // ------------------------------------------------------------
-        // QUERY
-        // ------------------------------------------------------------
-        public async Task<List<Transaction>> GetByAccountAsync(
-            long accountId,
-            DateOnly? start = null,
-            DateOnly? end = null)
-        {
-            using var conn = _db.OpenConnection();
-            using var cmd = conn.CreateCommand();
-
-            // NOTE: prefix with t. because we join Categories
-            var where = "t.AccountId = $accountId";
-            cmd.Parameters.AddWithValue("$accountId", accountId);
-
-            if (start is not null)
-            {
-                where += " AND t.PostedDate >= $start";
-                cmd.Parameters.AddWithValue("$start", start.Value.ToString("yyyy-MM-dd"));
-            }
-
-            if (end is not null)
-            {
-                where += " AND t.PostedDate <= $end";
-                cmd.Parameters.AddWithValue("$end", end.Value.ToString("yyyy-MM-dd"));
-            }
-
-            cmd.CommandText = $@"
-SELECT
-  t.Id,
-  t.AccountId,
-  t.PostedDate,
-  t.Description,
-  t.Amount,
-
-  -- IMPORTANT:
-  -- Old rows often have Category = '' (empty string), not NULL.
-  -- NULLIF(TRIM(...),'') turns empty/whitespace into NULL so we can fall back to Categories.Name.
-  COALESCE(NULLIF(TRIM(t.Category), ''), c.Name) AS Category,
-
-  t.CategoryId,
-  t.MatchedRuleId,
-  t.MatchedRulePattern,
-  t.CategorizedUtc,
-  t.FitId,
-  t.Source,
-  t.CreatedUtc
-FROM Transactions t
-LEFT JOIN Categories c ON c.Id = t.CategoryId
-WHERE {where}
-ORDER BY t.PostedDate DESC, t.Id DESC;
-";
-
-            var results = new List<Transaction>();
-
-            using var r = await cmd.ExecuteReaderAsync();
-            while (await r.ReadAsync())
-            {
-                results.Add(new Transaction
-                {
-                    Id = r.GetInt64(0),
-                    AccountId = r.GetInt64(1),
-                    PostedDate = DateOnly.Parse(r.GetString(2)),
-                    Description = r.GetString(3),
-                    Amount = (decimal)r.GetDouble(4),
-
-                    // This is the display category name (legacy Category if present, else Categories.Name)
-                    Category = r.IsDBNull(5) ? null : r.GetString(5),
-
-                    CategoryId = r.IsDBNull(6) ? null : r.GetInt64(6),
-                    MatchedRuleId = r.IsDBNull(7) ? null : r.GetInt64(7),
-                    MatchedRulePattern = r.IsDBNull(8) ? null : r.GetString(8),
-
-                    CategorizedUtc = r.IsDBNull(9)
-                        ? null
-                        : DateTime.Parse(r.GetString(9), null, DateTimeStyles.RoundtripKind),
-
-                    FitId = r.IsDBNull(10) ? null : r.GetString(10),
-                    Source = r.IsDBNull(11) ? null : r.GetString(11),
-
-                    CreatedUtc = DateTime.Parse(r.GetString(12), null, DateTimeStyles.RoundtripKind)
-                });
-            }
-
-            return results;
-        }
-
-        // ------------------------------------------------------------
-        // QUERY BY ID
-        // ------------------------------------------------------------
-        public async Task<Transaction?> GetByIdAsync(long id)
+        /// <summary>
+        /// Gets a transaction by Id.
+        /// By default, soft-deleted rows are excluded.
+        /// </summary>
+        public async Task<Transaction?> GetByIdAsync(long id, bool includeDeleted = false)
         {
             using var conn = _db.OpenConnection();
             using var cmd = conn.CreateCommand();
 
             cmd.CommandText = @"
 SELECT
-  t.Id,
-  t.AccountId,
-  t.PostedDate,
-  t.Description,
-  t.Amount,
-  t.Category,
-  t.CategoryId,
-  t.MatchedRuleId,
-  t.MatchedRulePattern,
-  t.CategorizedUtc,
-  t.FitId,
-  t.Source,
-  t.CreatedUtc
-FROM Transactions t
-WHERE t.Id = $id
+    Id,
+    AccountId,
+    PostedDate,
+    Description,
+    Amount,
+    Category,
+    CategoryId,
+    Memo,
+    FitId,
+    Source,
+    CreatedUtc
+FROM Transactions
+WHERE Id = $id
+" + (includeDeleted ? "" : "  AND IsDeleted = 0\n") + @"
 LIMIT 1;
 ";
             cmd.Parameters.AddWithValue("$id", id);
@@ -333,108 +516,216 @@ LIMIT 1;
                 Id = r.GetInt64(0),
                 AccountId = r.GetInt64(1),
                 PostedDate = DateOnly.Parse(r.GetString(2)),
-                Description = r.GetString(3),
+                Description = r.IsDBNull(3) ? "" : r.GetString(3),
                 Amount = (decimal)r.GetDouble(4),
+
                 Category = r.IsDBNull(5) ? null : r.GetString(5),
                 CategoryId = r.IsDBNull(6) ? null : r.GetInt64(6),
-                MatchedRuleId = r.IsDBNull(7) ? null : r.GetInt64(7),
-                MatchedRulePattern = r.IsDBNull(8) ? null : r.GetString(8),
-                CategorizedUtc = r.IsDBNull(9)
+                Memo = r.IsDBNull(7) ? null : r.GetString(7),
+
+                FitId = r.IsDBNull(8) ? null : r.GetString(8),
+                Source = r.IsDBNull(9) ? null : r.GetString(9),
+
+                CreatedUtc = r.IsDBNull(10)
                     ? null
-                    : DateTime.Parse(r.GetString(9), null, DateTimeStyles.RoundtripKind),
-                FitId = r.IsDBNull(10) ? null : r.GetString(10),
-                Source = r.IsDBNull(11) ? null : r.GetString(11),
-                CreatedUtc = DateTime.Parse(r.GetString(12), null, DateTimeStyles.RoundtripKind)
+                    : DateTime.Parse(r.GetString(10), null, DateTimeStyles.RoundtripKind)
             };
         }
 
-        // ------------------------------------------------------------
-        // UPDATE (Does NOT touch FitId/Source/CreatedUtc/AccountId)
-        // ------------------------------------------------------------
-        public async Task<bool> UpdateAsync(Transaction t)
+        public async Task UpdateAsync(Transaction t)
         {
-            if (t.Id <= 0)
-                throw new ArgumentOutOfRangeException(nameof(t.Id), "Transaction.Id must be set for update.");
-
             using var conn = _db.OpenConnection();
             using var cmd = conn.CreateCommand();
 
             cmd.CommandText = @"
 UPDATE Transactions
 SET
-  PostedDate = $postedDate,
-  Description = $desc,
-  Amount = $amount,
-  Category = $cat,
-  CategoryId = $categoryId,
-  MatchedRuleId = $matchedRuleId,
-  MatchedRulePattern = $matchedRulePattern,
-  CategorizedUtc = $categorizedUtc
+    PostedDate = $date,
+    Description = $desc,
+    Amount = $amount,
+    Category = $cat,
+    CategoryId = $categoryId,
+    Memo = $memo
 WHERE Id = $id;
-SELECT changes();
 ";
-
             cmd.Parameters.AddWithValue("$id", t.Id);
-            cmd.Parameters.AddWithValue("$postedDate", t.PostedDate.ToString("yyyy-MM-dd"));
-            cmd.Parameters.AddWithValue("$desc", t.Description);
+            cmd.Parameters.AddWithValue("$date", t.PostedDate.ToString("yyyy-MM-dd"));
+            cmd.Parameters.AddWithValue("$desc", t.Description ?? "");
             cmd.Parameters.AddWithValue("$amount", (double)t.Amount);
             cmd.Parameters.AddWithValue("$cat", (object?)t.Category ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$categoryId", (object?)t.CategoryId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$matchedRuleId", (object?)t.MatchedRuleId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$matchedRulePattern", (object?)t.MatchedRulePattern ?? DBNull.Value);
-            cmd.Parameters.AddWithValue(
-                "$categorizedUtc",
-                t.CategorizedUtc is null
-                    ? DBNull.Value
-                    : t.CategorizedUtc.Value.ToString("O"));
+            cmd.Parameters.AddWithValue("$memo", (object?)t.Memo ?? DBNull.Value);
 
-            var changed = (long)(await cmd.ExecuteScalarAsync() ?? 0L);
-            return changed > 0;
+            await cmd.ExecuteNonQueryAsync();
         }
 
-        // ------------------------------------------------------------
-        // DELETE
-        // ------------------------------------------------------------
-        public async Task<bool> DeleteByIdAsync(long id)
+        public async Task SoftDeleteAsync(long id)
         {
             using var conn = _db.OpenConnection();
             using var cmd = conn.CreateCommand();
 
             cmd.CommandText = @"
-DELETE FROM Transactions
+UPDATE Transactions
+SET IsDeleted = 1
 WHERE Id = $id;
-SELECT changes();
 ";
             cmd.Parameters.AddWithValue("$id", id);
 
-            var changed = (long)(await cmd.ExecuteScalarAsync() ?? 0L);
-            return changed > 0;
+            await cmd.ExecuteNonQueryAsync();
         }
+
+        // ============================================================
+        // Duplicate Audit Ignore List (restored)
+        // ============================================================
+
+        public async Task IgnoreDuplicatePairAsync(long aId, long bId, string? reason = null)
+        {
+            var x = Math.Min(aId, bId);
+            var y = Math.Max(aId, bId);
+
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            cmd.CommandText = @"
+INSERT OR IGNORE INTO DuplicateAuditIgnores
+(A_TransactionId, B_TransactionId, Reason, CreatedUtc)
+VALUES
+($a, $b, $reason, $utc);
+";
+            cmd.Parameters.AddWithValue("$a", x);
+            cmd.Parameters.AddWithValue("$b", y);
+            cmd.Parameters.AddWithValue("$reason", (object?)reason ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$utc", DateTime.UtcNow.ToString("O"));
+
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        public async Task<bool> IsIgnoredDuplicatePairAsync(long aId, long bId)
+        {
+            var x = Math.Min(aId, bId);
+            var y = Math.Max(aId, bId);
+
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            cmd.CommandText = @"
+SELECT 1
+FROM DuplicateAuditIgnores
+WHERE A_TransactionId = $a AND B_TransactionId = $b
+LIMIT 1;
+";
+            cmd.Parameters.AddWithValue("$a", x);
+            cmd.Parameters.AddWithValue("$b", y);
+
+            var result = await cmd.ExecuteScalarAsync();
+            return result is not null && result != DBNull.Value;
+        }
+
+        public async Task<List<DuplicateAuditResultRow>> RunDuplicateAuditAsync()
+        {
+            var candidates = await AuditDuplicatesAsync();
+
+            var results = new List<DuplicateAuditResultRow>(candidates.Count);
+
+            foreach (var c in candidates)
+            {
+                results.Add(new DuplicateAuditResultRow
+                {
+                    AccountName = c.AccountName,
+                    Type = c.Type == DuplicateType.Exact ? "Exact" : "Near",
+                    Reason = c.Reason,
+
+                    A_Id = c.A_Id,
+                    A_Date = c.A_Date.ToString("yyyy-MM-dd"),
+                    A_Description = c.A_Description,
+                    A_Amount = c.A_Amount.ToString("C"),
+
+                    B_Id = c.B_Id,
+                    B_Date = c.B_Date.ToString("yyyy-MM-dd"),
+                    B_Description = c.B_Description,
+                    B_Amount = c.B_Amount.ToString("C")
+                });
+            }
+
+            return results;
+        }
+
+        // ============================================================
+        // Helpers
+        // ============================================================
 
         private static void BindParameters(SqliteCommand cmd, Transaction t)
         {
             cmd.Parameters.AddWithValue("$accountId", t.AccountId);
             cmd.Parameters.AddWithValue("$postedDate", t.PostedDate.ToString("yyyy-MM-dd"));
-            cmd.Parameters.AddWithValue("$desc", t.Description);
+            cmd.Parameters.AddWithValue("$desc", t.Description ?? string.Empty);
             cmd.Parameters.AddWithValue("$amount", (double)t.Amount);
 
-            // Legacy text category column (UI fallback / transitional)
             cmd.Parameters.AddWithValue("$cat", (object?)t.Category ?? DBNull.Value);
-
-            // New category-rule based columns
             cmd.Parameters.AddWithValue("$categoryId", (object?)t.CategoryId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$memo", (object?)t.Memo ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$matchedRuleId", (object?)t.MatchedRuleId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$matchedRulePattern", (object?)t.MatchedRulePattern ?? DBNull.Value);
 
             cmd.Parameters.AddWithValue(
                 "$categorizedUtc",
-                t.CategorizedUtc is null
-                    ? DBNull.Value
-                    : t.CategorizedUtc.Value.ToString("O"));
+                t.CategorizedUtc is null ? DBNull.Value : t.CategorizedUtc.Value.ToString("O"));
 
             cmd.Parameters.AddWithValue("$fitId", (object?)t.FitId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$source", (object?)t.Source ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$createdUtc", t.CreatedUtc.ToString("O"));
+
+            var created = t.CreatedUtc == default ? DateTime.UtcNow : t.CreatedUtc;
+            cmd.Parameters.AddWithValue(
+                "$createdUtc",
+                created.HasValue ? created.Value.ToString("O") : (object)DBNull.Value);
+        }
+
+        private static Transaction ReadTransactionWithCategoryJoin(SqliteDataReader r)
+        {
+            return new Transaction
+            {
+                Id = r.GetInt64(0),
+                AccountId = r.GetInt64(1),
+                PostedDate = DateOnly.Parse(r.GetString(2)),
+                Description = r.GetString(3),
+                Amount = (decimal)r.GetDouble(4),
+
+                Category = r.IsDBNull(5) ? null : r.GetString(5),
+
+                CategoryId = r.IsDBNull(6) ? null : r.GetInt64(6),
+                MatchedRuleId = r.IsDBNull(7) ? null : r.GetInt64(7),
+                MatchedRulePattern = r.IsDBNull(8) ? null : r.GetString(8),
+
+                CategorizedUtc = r.IsDBNull(9)
+                    ? null
+                    : DateTime.Parse(r.GetString(9), null, DateTimeStyles.RoundtripKind),
+
+                FitId = r.IsDBNull(10) ? null : r.GetString(10),
+                Source = r.IsDBNull(11) ? null : r.GetString(11),
+
+                CreatedUtc = DateTime.Parse(r.GetString(12), null, DateTimeStyles.RoundtripKind)
+            };
+        }
+        // ------------------------------------------------------------
+        // SOFT DELETE (Deactivate Account)
+        // ------------------------------------------------------------
+        public async Task<bool> DeactivateByIdAsync(long id)
+        {
+            if (id <= 0) throw new ArgumentOutOfRangeException(nameof(id));
+
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            cmd.CommandText = @"
+UPDATE Accounts
+SET IsActive = 0
+WHERE Id = $id;
+SELECT changes();
+";
+            cmd.Parameters.AddWithValue("$id", id);
+
+            var changed = Convert.ToInt64(await cmd.ExecuteScalarAsync() ?? 0L, CultureInfo.InvariantCulture);
+            return changed > 0;
         }
     }
 }
