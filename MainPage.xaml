@@ -2,128 +2,52 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="eFinance.MainPage"
              Title="Finances">
-    <VerticalStackLayout Padding="40" Spacing="25" VerticalOptions="Center">
+
+    <VerticalStackLayout Padding="40"
+                         Spacing="25"
+                         VerticalOptions="Center">
+
         <Label Text="Finances"
                FontSize="32"
+               FontAttributes="Bold"
                HorizontalOptions="Center" />
 
-        <!-- 5-column grid for main navigation -->
-        <Grid ColumnDefinitions="*,*,*,*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
-            <!-- Column Headers -->
-            <Label Grid.Row="0" Grid.Column="0" Text="Summary" FontSize="20" FontAttributes="Bold" HorizontalOptions="Center"/>
-            <Label Grid.Row="0" Grid.Column="1" Text="Assets" FontSize="20" FontAttributes="Bold" HorizontalOptions="Center"/>
-            <Label Grid.Row="0" Grid.Column="2" Text="Cash" FontSize="20" FontAttributes="Bold" HorizontalOptions="Center"/>
-            <Label Grid.Row="0" Grid.Column="3" Text="Liabilities" FontSize="20" FontAttributes="Bold" HorizontalOptions="Center"/>
-            <Label Grid.Row="0" Grid.Column="4" Text="Tools" FontSize="20" FontAttributes="Bold" HorizontalOptions="Center"/>
+        <!-- 2x2 grid -->
+        <Grid RowDefinitions="Auto,Auto"
+              ColumnDefinitions="*,*"
+              RowSpacing="16"
+              ColumnSpacing="16"
+              HorizontalOptions="Center">
 
-            <!-- Column 0: Summary -->
-            <Button Grid.Row="1" Grid.Column="0" Text="Finance Summary" BackgroundColor="LightYellow"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenFinanceSummaryCommand}" />
-            <Button Grid.Row="2" Grid.Column="0" Text="Calendar" BackgroundColor="LightYellow"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenCalendarCommand}" />
-            <Button Grid.Row="3" Grid.Column="0" Text="Expense Summary" BackgroundColor="LightYellow"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenExpenseCommand}" />
-            <Button Grid.Row="4" Grid.Column="0" Text="Average Expense Summary" BackgroundColor="LightYellow"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenAverageExpenseCommand}" />
-            <Button Grid.Row="5" Grid.Column="0" Text="Cash Flow" BackgroundColor="LightYellow"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenCashFlowCommand}" />
-
-            <!-- Column 1: Assets -->
-            <Button Grid.Row="1" Grid.Column="1" Text="Midland" BackgroundColor="LightBlue"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenMidlandCommand}" />
-            <Button Grid.Row="2" Grid.Column="1" Text="Charles Schwab Contributory" BackgroundColor="LightBlue"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenCharlesSchwabContributoryCommand}" />
-            <Button Grid.Row="3" Grid.Column="1" Text="Charles Schwab Joint Tenant" BackgroundColor="LightBlue"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenCharlesSchwabJointTenantCommand}" />
-            <Button Grid.Row="4" Grid.Column="1" Text="Charles Schwab Roth IRA Ed" BackgroundColor="LightBlue"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenCharlesSchwabRothIRAEdCommand}" />
-            <Button Grid.Row="5" Grid.Column="1" Text="Charles Schwab Roth IRA Patti" BackgroundColor="LightBlue"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenCharlesSchwabRothIRAPattiCommand}" />
-            <Button Grid.Row="6" Grid.Column="1" Text="NetX" BackgroundColor="LightBlue"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenNetXCommand}" />
-            <Button Grid.Row="7" Grid.Column="1" Text="HealthPro" BackgroundColor="LightBlue"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenHealthProCommand}" />
-            <Button Grid.Row="8" Grid.Column="1" Text="Select 401(K)" BackgroundColor="LightBlue"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenSelect401KCommand}" />
-            <Button Grid.Row="9" Grid.Column="1" Text="Gold" BackgroundColor="LightBlue"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenGoldCommand}" />
-            <Button Grid.Row="10" Grid.Column="1" Text="House" BackgroundColor="LightBlue"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenHouseCommand}" />
-            <Button Grid.Row="11" Grid.Column="1" Text="Cheverolet Impala" BackgroundColor="LightBlue"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenChevroletImpalaCommand}" />
-            <Button Grid.Row="12" Grid.Column="1" Text="Nissan Sentra" BackgroundColor="LightBlue"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenNissanSentraCommand}" />
-
-            <!-- Column 2: Cash -->
-            <Button Grid.Row="1" Grid.Column="2" Text="Cash Register" BackgroundColor="Azure"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenCashCommand}" />
-            <Button Grid.Row="2" Grid.Column="2" Text="BMO Check Register" BackgroundColor="Azure"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenBmoCheckRegisterCommand}" />
-            <Button Grid.Row="3" Grid.Column="2" Text="BMO Money Market Register" BackgroundColor="Azure"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenBmoMoneyMarketRegisterCommand}" />
-            <Button Grid.Row="4" Grid.Column="2" Text="BMO CD Register" BackgroundColor="Azure"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenBmoCdRegisterCommand}" />
-
-            <Button Grid.Row="14" Grid.Column="2" Text="Exit" WidthRequest="96"
-                    BackgroundColor="IndianRed" TextColor="Black" FontSize="16"
-                    HorizontalOptions="Fill"
-                    Command="{Binding ExitCommand}" />
-
-            <!-- Column 3: Liabilities -->
-            <Button Grid.Row="1" Grid.Column="3" Text="AMEX" BackgroundColor="Moccasin"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
+            <Button Grid.Row="0" Grid.Column="0"
+                    Text="AMEX"
+                    BackgroundColor="Moccasin"
+                    TextColor="Black"
+                    WidthRequest="220"
                     Command="{Binding OpenAMEXCommand}" />
-            <Button Grid.Row="2" Grid.Column="3" Text="Visa" BackgroundColor="Moccasin"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenVisaCommand}" />
-            <Button Grid.Row="3" Grid.Column="3" Text="MasterCard" BackgroundColor="Moccasin"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenMasterCardCommand}" />
 
-            <!-- Column 4: Tools -->
-            <Button Grid.Row="1" Grid.Column="4" Text="Check Number" BackgroundColor="LightGray"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenCheckNumberCommand}" />
-            <Button Grid.Row="2" Grid.Column="4" Text="Category" BackgroundColor="LightGray"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenCategoryCommand}" />
-            <Button Grid.Row="3" Grid.Column="4" Text="Category List" BackgroundColor="LightGray"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenCategoryListCommand}" />
-            <Button Grid.Row="4" Grid.Column="4" Text="Opening Balances" BackgroundColor="LightGray"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenOpeningBalancesCommand}" />
-            <Button Grid.Row="5" Grid.Column="4" Text="Excluded Categories" BackgroundColor="LightGray"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenExcludedCategoriesCommand}" />
-            <Button Grid.Row="6" Grid.Column="4" Text="Forecast Expenses" BackgroundColor="LightGray"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenForecastExpensesCommand}" />
-                    <Button Grid.Row="7" Grid.Column="4" Text="Data Sync" BackgroundColor="LightGray"
-                    TextColor="Black" FontSize="16" HorizontalOptions="Fill"
-                    Command="{Binding OpenDataSyncCommand}" />
+            <Button Grid.Row="0" Grid.Column="1"
+                    Text="Duplicate Audit"
+                    BackgroundColor="DarkSeaGreen"
+                    TextColor="Black"
+                    WidthRequest="220"
+                    Command="{Binding OpenDuplicateAuditCommand}" />
 
+            <Button Grid.Row="1" Grid.Column="1"
+                    Text="Categories"
+                    BackgroundColor="LightGray"
+                    TextColor="Black"
+                    WidthRequest="220"
+                    Command="{Binding CategoriesCommand}" />
         </Grid>
+
+        <!-- Exit Button -->
+        <Button Text="Exit"
+                WidthRequest="120"
+                BackgroundColor="IndianRed"
+                TextColor="White"
+                HorizontalOptions="Center"
+                Command="{Binding ExitCommand}" />
+
     </VerticalStackLayout>
 </ContentPage>

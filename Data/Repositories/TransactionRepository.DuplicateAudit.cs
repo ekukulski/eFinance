@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using eFinance.Data.Models;
-using eFinance.Importing; // FitIdHelper
+using eFinance.Importing;
 
 namespace eFinance.Data.Repositories
 {
@@ -42,7 +42,7 @@ namespace eFinance.Data.Repositories
                     var a = ordered[i];
                     var b = ordered[i + 1];
 
-                    // NEW: Skip if user already accepted this pair
+                    // Skip if user already accepted/ignored this pair (method exists in TransactionRepository.cs)
                     if (await IsIgnoredDuplicatePairAsync(a.Id, b.Id))
                         continue;
 
@@ -54,12 +54,12 @@ namespace eFinance.Data.Repositories
                         "Same FitId exists multiple times (definite duplicate)."));
 
                     if (results.Count >= options.MaxResults)
-                        return results;
+                        return Finalize(results, options.MaxResults);
                 }
             }
 
             // ============================================================
-            // 2) Near duplicates:
+            // 2) Near duplicates
             // Same account + same amount + within N days + similar description
             // ============================================================
             foreach (var bucket in rows.GroupBy(r => (r.AccountId, r.Amount)))
@@ -79,7 +79,7 @@ namespace eFinance.Data.Repositories
                         if (dayDiff > options.NearDuplicateDateWindowDays)
                             break;
 
-                        // Skip exact FitId duplicates (already handled above)
+                        // Skip exact FitId duplicates (handled above)
                         if (!string.IsNullOrWhiteSpace(a.FitId) && a.FitId == b.FitId)
                             continue;
 
@@ -87,7 +87,7 @@ namespace eFinance.Data.Repositories
                         if (score < options.SimilarityThreshold)
                             continue;
 
-                        // NEW: Skip if user already accepted this pair
+                        // Skip if user already accepted/ignored this pair
                         if (await IsIgnoredDuplicatePairAsync(a.Id, b.Id))
                             continue;
 
@@ -99,16 +99,12 @@ namespace eFinance.Data.Repositories
                             $"Same amount, within {dayDiff} day(s), similar description (score {score:0.00})."));
 
                         if (results.Count >= options.MaxResults)
-                            return results;
+                            return Finalize(results, options.MaxResults);
                     }
                 }
             }
 
-            return results
-                .OrderByDescending(r => r.Type == DuplicateType.Exact)
-                .ThenByDescending(r => r.Score)
-                .Take(options.MaxResults)
-                .ToList();
+            return Finalize(results, options.MaxResults);
         }
 
         private async Task<List<AuditRow>> LoadAuditRowsAsync(DateOnly start)
@@ -127,7 +123,8 @@ SELECT
   t.FitId
 FROM Transactions t
 JOIN Accounts a ON a.Id = t.AccountId
-WHERE t.PostedDate >= $start
+WHERE COALESCE(t.IsDeleted, 0) = 0
+  AND t.PostedDate >= $start
 ORDER BY t.AccountId, t.Amount, t.PostedDate, t.Id;
 ";
             cmd.Parameters.AddWithValue("$start", start.ToString("yyyy-MM-dd"));
@@ -186,6 +183,13 @@ ORDER BY t.AccountId, t.Amount, t.PostedDate, t.Id;
                 Score = score,
                 Reason = reason
             };
+
+        private static List<DuplicateCandidate> Finalize(List<DuplicateCandidate> results, int maxResults)
+            => results
+                .OrderByDescending(r => r.Type == DuplicateType.Exact)
+                .ThenByDescending(r => r.Score)
+                .Take(maxResults)
+                .ToList();
 
         private static double Jaccard(string a, string b)
         {

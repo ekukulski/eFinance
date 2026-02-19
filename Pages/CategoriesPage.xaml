@@ -1,0 +1,34 @@
+<ContentPage
+    x:Class="eFinance.Pages.CategoriesPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    Title="{Binding Title}">
+
+    <Grid RowDefinitions="Auto,*,Auto" Padding="12" RowSpacing="10">
+
+        <SearchBar
+            Grid.Row="0"
+            Placeholder="Search categories"
+            Text="{Binding SearchText}" />
+
+        <CollectionView
+            Grid.Row="1"
+            ItemsSource="{Binding FilteredCategories}"
+            SelectionMode="Single"
+            SelectedItem="{Binding SelectedCategory}">
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <Label Text="{Binding Name}" Padding="8" />
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <Grid Grid.Row="2" ColumnDefinitions="*,*,*,*" ColumnSpacing="10">
+            <Button Text="Add" Command="{Binding AddCommand}" />
+            <Button Grid.Column="1" Text="Edit" Command="{Binding EditCommand}" />
+            <Button Grid.Column="2" Text="Delete" Command="{Binding DeleteCommand}" />
+            <Button Grid.Column="3" Text="Return" Command="{Binding ReturnCommand}" />
+        </Grid>
+
+    </Grid>
+</ContentPage>

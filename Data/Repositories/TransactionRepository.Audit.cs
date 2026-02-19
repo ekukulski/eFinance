@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Threading.Tasks;
 using eFinance.Data.Models;
+using TransactionModel = eFinance.Data.Models.Transaction;
+
 
 namespace eFinance.Data.Repositories
 {

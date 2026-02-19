@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="eFinance.Pages.DeletedTransactionsPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:vm="clr-namespace:eFinance.ViewModels"
+    xmlns:models="clr-namespace:eFinance.Data.Models"
+    Title="{Binding Title}">
+
+    <Grid RowDefinitions="Auto,Auto,*" Padding="12" RowSpacing="10">
+
+        <!-- Top buttons -->
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+            <Button Text="Back"
+                    BackgroundColor="IndianRed"
+                    TextColor="White"
+                    Command="{Binding BackCommand}" />
+
+            <Label Grid.Column="1"
+                   Text="{Binding Title}"
+                   FontSize="18"
+                   FontAttributes="Bold"
+                   HorizontalOptions="Center"
+                   VerticalOptions="Center" />
+
+            <Button Grid.Column="2"
+                    Text="Restore All"
+                    BackgroundColor="DarkSeaGreen"
+                    TextColor="Black"
+                    Command="{Binding RestoreAllCommand}" />
+        </Grid>
+
+        <!-- Busy indicator -->
+        <ActivityIndicator Grid.Row="1"
+                           IsRunning="{Binding IsBusy}"
+                           IsVisible="{Binding IsBusy}"
+                           HorizontalOptions="Center" />
+
+        <!-- List -->
+        <CollectionView Grid.Row="2"
+                        ItemsSource="{Binding Deleted}"
+                        SelectionMode="None">
+
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="models:Transaction">
+
+                    <Frame Padding="10" Margin="0,6" CornerRadius="10">
+                        <Grid RowDefinitions="Auto,Auto"
+                              ColumnDefinitions="*,Auto"
+                              ColumnSpacing="10"
+                              RowSpacing="4">
+
+                            <Label Grid.Row="0" Grid.Column="0"
+                                   Text="{Binding Description}"
+                                   FontAttributes="Bold"
+                                   LineBreakMode="TailTruncation" />
+
+                            <Label Grid.Row="0" Grid.Column="1"
+                                   Text="{Binding Amount, StringFormat='{0:C}'}"
+                                   HorizontalTextAlignment="End" />
+
+                            <Label Grid.Row="1" Grid.Column="0"
+                                   Text="{Binding PostedDate, StringFormat='{0:yyyy-MM-dd}'}"
+                                   FontSize="12"
+                                   Opacity="0.8" />
+
+                            <Grid Grid.Row="1" Grid.Column="1"
+                                  ColumnDefinitions="Auto,Auto"
+                                  ColumnSpacing="8">
+
+                                <Label Grid.Column="0"
+                                       Text="{Binding Category}"
+                                       FontSize="12"
+                                       Opacity="0.8"
+                                       HorizontalTextAlignment="End" />
+
+                                <Button Grid.Column="1"
+                                        Text="Restore"
+                                        BackgroundColor="CornflowerBlue"
+                                        TextColor="White"
+                                        Padding="10,6"
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:DeletedTransactionsViewModel}}, Path=RestoreCommand}"
+                                        CommandParameter="{Binding .}" />
+                            </Grid>
+
+                        </Grid>
+                    </Frame>
+
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+    </Grid>
+</ContentPage>

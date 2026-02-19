@@ -1,4 +1,5 @@
-using System;
+﻿using System;
+using System.IO;
 using eFinance.Data;
 using eFinance.Data.Repositories;
 using eFinance.Importing;
@@ -24,75 +25,94 @@ public static class MauiProgram
             .UseSkiaSharp()
             .UseLiveCharts();
 
-        // -----------------------------
-        // SQLite (Microsoft.Data.Sqlite)
-        // Register DB early and ensure schema exists
-        // -----------------------------
+#if DEBUG
+        builder.Logging.AddDebug();
+#endif
+
+        // ------------------------------------------------------------
+        // Paths / folders
+        // ------------------------------------------------------------
+        var appDataDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "eFinance");
+
+        var importDropDir = Path.Combine(appDataDir, "ImportDrop");
+
+        Directory.CreateDirectory(appDataDir);
+        Directory.CreateDirectory(importDropDir);
+
+        // ------------------------------------------------------------
+        // Database
+        // ------------------------------------------------------------
         builder.Services.AddSingleton(sp =>
         {
             var dbPath = SqliteDatabase.DefaultDbPath(appName: "eFinance");
             System.Diagnostics.Debug.WriteLine("USING DB AT: " + dbPath);
 
             var db = new SqliteDatabase(dbPath);
-
-            // IMPORTANT: ensure schema/migrations exist before anything uses the DB
             db.InitializeAsync().GetAwaiter().GetResult();
 
             return db;
         });
 
-        // -----------------------------
-        // Repositories / Domain services
-        // -----------------------------
+        // ------------------------------------------------------------
+        // Repositories
+        // ------------------------------------------------------------
         builder.Services.AddSingleton<AccountRepository>();
         builder.Services.AddSingleton<TransactionRepository>();
+        builder.Services.AddSingleton<OpeningBalanceRepository>();
+        builder.Services.AddSingleton<CategoryRepository>();
         builder.Services.AddSingleton<CategorizationService>();
 
-        // -----------------------------
-        // Services / Infrastructure
-        // -----------------------------
+        // ------------------------------------------------------------
+        // Infrastructure services
+        // ------------------------------------------------------------
         builder.Services.AddSingleton<INavigationService, NavigationService>();
-        builder.Services.AddTransient<MainPageViewModel>();
-        builder.Services.AddTransient<MainPage>();
-        builder.Services.AddTransient<eFinance.Pages.DataSyncPage>();
-        builder.Services.AddSingleton<AppShell>();
         builder.Services.AddSingleton<IWindowSizingService, WindowSizingService>();
         builder.Services.AddSingleton<ICsvFileService, CsvFileService>();
         builder.Services.AddSingleton<ICloudSyncService, CloudSyncService>();
+        builder.Services.AddSingleton<IDialogService, DialogService>();
 
-        // -----------------------------
-        // Importing
-        // -----------------------------
+        // ------------------------------------------------------------
+        // Importing pipeline
+        // ------------------------------------------------------------
         builder.Services.AddSingleton<IImporter, AmexImporter>();
         builder.Services.AddSingleton<ImportPipeline>();
 
-        // Choose a folder you want to watch. Example: LocalAppData\eFinance\ImportDrop
         builder.Services.AddSingleton(sp =>
         {
             var pipeline = sp.GetRequiredService<ImportPipeline>();
-            var folder = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "eFinance",
-                "ImportDrop");
-
-            return new ImportWatcher(folder, pipeline);
+            return new ImportWatcher(importDropDir, pipeline);
         });
 
-        // -----------------------------
-        // UI / Navigation
-        // -----------------------------
+        // ------------------------------------------------------------
+        // ViewModels
+        // ------------------------------------------------------------
+        builder.Services.AddTransient<MainPageViewModel>();
+        builder.Services.AddTransient<RegisterViewModel>();
+        builder.Services.AddTransient<TransactionEditViewModel>();
+        builder.Services.AddTransient<DuplicateAuditViewModel>();
+        builder.Services.AddTransient<DeletedTransactionsViewModel>();
+        builder.Services.AddTransient<CategoriesViewModel>();
+        // ------------------------------------------------------------
+        // Pages
+        // ------------------------------------------------------------
+        builder.Services.AddTransient<MainPage>();
+        builder.Services.AddTransient<RegisterPage>();
+        builder.Services.AddTransient<DuplicateAuditPage>();
+        builder.Services.AddTransient<CategoriesPage>();
+        builder.Services.AddTransient<CategoriesPage>();
+        builder.Services.AddTransient<TransactionEditPage>();
+        builder.Services.AddTransient<DeletedTransactionsPage>();
+
+        // ------------------------------------------------------------
+        // Shell
+        // ------------------------------------------------------------
         builder.Services.AddSingleton<AppShell>();
 
-        builder.Services.AddTransient<eFinance.Pages.DataSyncPage>();
-        builder.Services.AddTransient<AmexRegisterPage>();
-
-#if DEBUG
-        builder.Logging.AddDebug();
-#endif
-
-        // Capture the built MauiApp so we can use app.Services later (for window sizing hook)
-        MauiApp? app = null;
-
+        // ------------------------------------------------------------
+        // Window sizing (Windows only)
+        // ------------------------------------------------------------
         builder.ConfigureLifecycleEvents(events =>
         {
 #if WINDOWS
@@ -100,17 +120,25 @@ public static class MauiProgram
             {
                 w.OnWindowCreated(window =>
                 {
-                    var sizer = app?.Services.GetService<IWindowSizingService>();
-                    if (sizer is null)
-                        return;
+                    try
+                    {
+                        var services = Application.Current?.Handler?.MauiContext?.Services;
+                        var sizer = services?.GetService<IWindowSizingService>();
+                        if (sizer is null)
+                            return;
 
-                    window.DispatcherQueue.TryEnqueue(() => sizer.ApplyDefaultSizing());
+                        window.DispatcherQueue.TryEnqueue(() =>
+                            sizer.ApplyDefaultSizing());
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine("Window sizing hook failed: " + ex);
+                    }
                 });
             });
 #endif
         });
 
-        app = builder.Build();
-        return app;
+        return builder.Build();
     }
 }

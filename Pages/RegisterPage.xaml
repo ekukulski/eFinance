@@ -1,29 +1,131 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<ContentPage
-    x:Class="eFinance.Pages.RegisterPage"
-    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
-    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-    Title="{Binding Title}">
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="eFinance.Pages.RegisterPage"
+             Title="{Binding Title}">
 
-    <Grid RowDefinitions="Auto,*" Padding="10">
+    <Grid RowDefinitions="Auto,Auto,Auto,*"
+          Padding="16"
+          RowSpacing="12">
 
-        <Label
-            Grid.Row="0"
-            Text="{Binding Title}"
-            FontSize="20"
-            FontAttributes="Bold"
-            Margin="0,0,0,8" />
+        <!-- Button bar (wraps instead of running off-screen) -->
+        <FlexLayout Grid.Row="0"
+                    Direction="Row"
+                    Wrap="Wrap"
+                    AlignItems="Start"
+                    JustifyContent="Start">
 
-        <CollectionView Grid.Row="1" ItemsSource="{Binding Items}">
+            <Button Text="Add New Transactions"
+                    Command="{Binding AddTransactionCommand}" />
+
+            <Button Text="Edit Transaction"
+                    Command="{Binding EditTransactionCommand}" />
+
+            <Button Text="Copy Transaction Description"
+                    Command="{Binding CopyDescriptionCommand}" />
+
+            <Button Text="Delete Transaction"
+                    Command="{Binding DeleteSelectedCommand}" />
+
+            <Button Text="Trash"
+                    Command="{Binding OpenTrashCommand}" />
+
+            <Button Text="Return"
+                    Style="{StaticResource ReturnButtonStyle}"
+                    Command="{Binding ReturnCommand}" />
+
+        </FlexLayout>
+
+        <!-- Title + Balance + Refresh -->
+        <Grid Grid.Row="1"
+              ColumnDefinitions="*,Auto,Auto,Auto"
+              ColumnSpacing="10"
+              VerticalOptions="Center">
+
+            <Label Grid.Column="0"
+                   Text="{Binding Title}"
+                   FontAttributes="Bold"
+                   FontSize="18"
+                   VerticalTextAlignment="Center" />
+
+            <Label Grid.Column="1"
+                   Text="Balance ="
+                   FontAttributes="Bold"
+                   VerticalTextAlignment="Center" />
+
+            <Label Grid.Column="2"
+                   Text="{Binding CurrentBalance, StringFormat='{}{0:C}'}"
+                   FontAttributes="Bold"
+                   VerticalTextAlignment="Center" />
+
+            <Button Grid.Column="3"
+                    Text="Refresh"
+                    Command="{Binding RefreshCommand}" />
+
+        </Grid>
+
+        <!-- Search box -->
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="10">
+            <Entry Grid.Column="0"
+                   Placeholder="Search transactions..."
+                   ClearButtonVisibility="WhileEditing"
+                   Text="{Binding SearchText, Mode=TwoWay}"
+                   ReturnType="Search"
+                   Completed="SearchEntry_Completed" />
+
+            <!-- Optional: quick clear button (Entry clear button only shows while editing) -->
+            <Button Grid.Column="1"
+                    Text="Clear"
+                    Command="{Binding Source={RelativeSource AncestorType={x:Type ContentPage}}, Path=BindingContext.RefreshCommand}" 
+                    IsVisible="False" />
+        </Grid>
+
+        <!-- Register list -->
+        <CollectionView Grid.Row="3"
+                        ItemsSource="{Binding Items}"
+                        SelectionMode="Single"
+                        SelectedItem="{Binding SelectedRow, Mode=TwoWay}">
+
+            <CollectionView.Header>
+                <Grid ColumnDefinitions="110,*,180,120,120"
+                      Padding="6">
+
+                    <Label Text="DATE" FontAttributes="Bold" />
+                    <Label Grid.Column="1" Text="DESCRIPTION" FontAttributes="Bold" />
+                    <Label Grid.Column="2" Text="CATEGORY" FontAttributes="Bold" />
+                    <Label Grid.Column="3" Text="AMOUNT" FontAttributes="Bold" HorizontalTextAlignment="End" />
+                    <Label Grid.Column="4" Text="BALANCE" FontAttributes="Bold" HorizontalTextAlignment="End" />
+
+                </Grid>
+            </CollectionView.Header>
+
             <CollectionView.ItemTemplate>
                 <DataTemplate>
-                    <Grid ColumnDefinitions="110,*,100" Padding="6">
-                        <Label Grid.Column="0" Text="{Binding PostedDate}" />
-                        <Label Grid.Column="1" Text="{Binding Description}" LineBreakMode="TailTruncation" />
-                        <Label Grid.Column="2" Text="{Binding Amount}" HorizontalTextAlignment="End" />
+                    <Grid ColumnDefinitions="110,*,180,120,120"
+                          Padding="6">
+
+                        <Label Text="{Binding PostedDate}" />
+
+                        <Label Grid.Column="1"
+                               Text="{Binding Description}"
+                               LineBreakMode="TailTruncation" />
+
+                        <Label Grid.Column="2"
+                               Text="{Binding Category}"
+                               LineBreakMode="TailTruncation" />
+
+                        <Label Grid.Column="3"
+                               Text="{Binding Amount, StringFormat='{}{0:C}'}"
+                               HorizontalTextAlignment="End" />
+
+                        <Label Grid.Column="4"
+                               Text="{Binding Balance, StringFormat='{}{0:C}'}"
+                               HorizontalTextAlignment="End" />
+
                     </Grid>
                 </DataTemplate>
             </CollectionView.ItemTemplate>
+
         </CollectionView>
 
     </Grid>

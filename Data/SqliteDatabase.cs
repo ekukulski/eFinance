@@ -2,7 +2,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
+using eFinance.Helpers;
 
 namespace eFinance.Data
 {
@@ -79,6 +81,7 @@ CREATE TABLE IF NOT EXISTS Transactions (
     Description     TEXT NOT NULL,
     Amount          REAL NOT NULL,          -- positive/negative per your convention
     Category        TEXT NULL,              -- legacy/temporary
+    Memo            TEXT NULL,
     FitId           TEXT NULL,              -- import unique id, optional
     Source          TEXT NULL,              -- e.g., 'AMEX'
     CreatedUtc      TEXT NOT NULL,
@@ -146,12 +149,34 @@ ON CategoryRules(CategoryId);
 ";
             await cmd.ExecuteNonQueryAsync();
 
+            // ------------------------------------------------------------
+            // Duplicate audit ignores (persist "Accept (not a duplicate)")
+            // ------------------------------------------------------------
+            await ExecuteNonQueryAsync(conn, @"
+CREATE TABLE IF NOT EXISTS DuplicateAuditIgnores (
+    A_TransactionId INTEGER NOT NULL,
+    B_TransactionId INTEGER NOT NULL,
+    Reason          TEXT NULL,
+    CreatedUtc      TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+
+    PRIMARY KEY (A_TransactionId, B_TransactionId)
+);
+
+CREATE INDEX IF NOT EXISTS IX_DuplicateAuditIgnores_A
+ON DuplicateAuditIgnores(A_TransactionId);
+
+CREATE INDEX IF NOT EXISTS IX_DuplicateAuditIgnores_B
+ON DuplicateAuditIgnores(B_TransactionId);
+");
+
             // ---- Migrations / upgrades for existing DBs ----
             // Add new columns to Transactions if missing.
             await EnsureColumnAsync(conn, "Transactions", "CategoryId", "INTEGER NULL");
             await EnsureColumnAsync(conn, "Transactions", "MatchedRuleId", "INTEGER NULL");
             await EnsureColumnAsync(conn, "Transactions", "MatchedRulePattern", "TEXT NULL");
             await EnsureColumnAsync(conn, "Transactions", "CategorizedUtc", "TEXT NULL");
+            await EnsureColumnAsync(conn, "Transactions", "Memo", "TEXT NULL");
+            await EnsureColumnAsync(conn, "Transactions", "IsDeleted", "INTEGER NOT NULL DEFAULT 0");
 
             // Helpful indexes for the new columns
             await ExecuteNonQueryAsync(conn, @"
@@ -168,6 +193,79 @@ ON Transactions(MatchedRuleId);
 CREATE UNIQUE INDEX IF NOT EXISTS UX_CategoryRules_UniqueRule
 ON CategoryRules(DescriptionPattern, CategoryId, MatchType);
 ");
+
+            // ---- One-time seeding / migrations from legacy CSV files ----
+            await SeedCategoriesFromLegacyCsvIfNeededAsync(conn);
+            await BackfillTransactionCategoryIdsFromLegacyCategoryTextAsync(conn);
+        }
+
+        private static async Task SeedCategoriesFromLegacyCsvIfNeededAsync(SqliteConnection conn)
+        {
+            // If Categories already has data, don't touch it.
+            using (var countCmd = conn.CreateCommand())
+            {
+                countCmd.CommandText = "SELECT COUNT(*) FROM Categories;";
+                var count = (long)(await countCmd.ExecuteScalarAsync() ?? 0L);
+                if (count > 0)
+                    return;
+            }
+
+            // Attempt to load legacy CategoryList.csv into Categories.
+            var legacyPath = FilePathHelper.GeteFinancePath("CategoryList.csv");
+            if (!File.Exists(legacyPath))
+                return;
+
+            var lines = File.ReadAllLines(legacyPath)
+                .Select(l => (l ?? string.Empty).Trim())
+                .Where(l => !string.IsNullOrWhiteSpace(l))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(l => l)
+                .ToList();
+
+            if (lines.Count == 0)
+                return;
+
+            using var tx = conn.BeginTransaction();
+            using var insert = conn.CreateCommand();
+            insert.Transaction = tx;
+            insert.CommandText = @"
+INSERT OR IGNORE INTO Categories (Name, IsActive, CreatedUtc)
+VALUES ($name, 1, $utc);
+";
+            var pName = insert.CreateParameter(); pName.ParameterName = "$name"; insert.Parameters.Add(pName);
+            var pUtc = insert.CreateParameter(); pUtc.ParameterName = "$utc"; insert.Parameters.Add(pUtc);
+
+            foreach (var name in lines)
+            {
+                pName.Value = name;
+                pUtc.Value = DateTime.UtcNow.ToString("O");
+                await insert.ExecuteNonQueryAsync();
+            }
+
+            tx.Commit();
+        }
+
+        private static async Task BackfillTransactionCategoryIdsFromLegacyCategoryTextAsync(SqliteConnection conn)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+UPDATE Transactions
+SET CategoryId = (
+    SELECT c.Id
+    FROM Categories c
+    WHERE LOWER(TRIM(c.Name)) = LOWER(TRIM(Transactions.Category))
+    LIMIT 1
+)
+WHERE CategoryId IS NULL
+  AND Category IS NOT NULL
+  AND TRIM(Category) <> ''
+  AND EXISTS (
+    SELECT 1
+    FROM Categories c
+    WHERE LOWER(TRIM(c.Name)) = LOWER(TRIM(Transactions.Category))
+  );
+";
+            await cmd.ExecuteNonQueryAsync();
         }
 
         // -----------------------------

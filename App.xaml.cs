@@ -1,21 +1,22 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
 using eFinance.Data;
 using eFinance.Data.Repositories;
+using eFinance.Helpers;
 using eFinance.Importing;
 using eFinance.Services;
 using Microsoft.Data.Sqlite;
-using eFinance.Helpers;
 using Microsoft.Maui.Dispatching;
 using Microsoft.Maui.Storage;
+using TransactionModel = eFinance.Data.Models.Transaction;
 
 namespace eFinance;
 
 public partial class App : Application
 {
+    private readonly AppShell _shell;
     private readonly ICloudSyncService _sync;
     private readonly SqliteDatabase _db;
     private readonly AccountRepository _accounts;
@@ -26,7 +27,7 @@ public partial class App : Application
     private const string PrefLastImported = "eFinance.Last.ImportedSnapshot";
     private const string PrefLastExported = "eFinance.Last.ExportedSnapshot";
 
-    // ✅ One-time seed marker (prevents re-seeding)
+    // One-time seed marker (prevents re-seeding)
     private const string PrefOpeningBalancesSeeded = "eFinance.OpeningBalances.Seeded";
 
     public App(
@@ -38,36 +39,38 @@ public partial class App : Application
     {
         InitializeComponent();
 
-        // Force the app to always use Light mode
-        UserAppTheme = AppTheme.Light;
-
-        MainPage = shell;
-
+        _shell = shell ?? throw new ArgumentNullException(nameof(shell));
         _sync = sync ?? throw new ArgumentNullException(nameof(sync));
         _db = db ?? throw new ArgumentNullException(nameof(db));
         _accounts = accounts ?? throw new ArgumentNullException(nameof(accounts));
         _importWatcher = importWatcher ?? throw new ArgumentNullException(nameof(importWatcher));
+
+        // Let Windows/theme decide (don’t force Light)
+        UserAppTheme = AppTheme.Unspecified;
+
+        MainPage = _shell;
     }
 
-    // Run startup work only after the window/UI exists.
     protected override Window CreateWindow(IActivationState? activationState)
     {
         var window = base.CreateWindow(activationState);
 
+        // Run startup work only after the UI exists.
         MainThread.BeginInvokeOnMainThread(async () =>
         {
             try
             {
                 // Let Shell render first.
-                await Task.Delay(300);
+                await Task.Delay(150);
 
-                // 1) Ensure local SQLite DB exists (non-disruptive, fast).
                 await InitializeLocalDatabaseAsync();
 
-                // ✅ Start watching the import drop folder AFTER DB is ready.
+                EnsureImportDropFolderExists();
+
+                // Start watching the import drop folder AFTER DB is ready.
                 _importWatcher.Start();
 
-                // 2) Then do optional startup import (still guarded & best-effort).
+                // Optional startup import (guarded & best-effort).
                 await TryAutoImportOnStartupAsync();
             }
             catch (Exception ex)
@@ -85,25 +88,38 @@ public partial class App : Application
 
         // Best-effort export when app is backgrounded/closing.
         _ = TryAutoExportOnExitAsync();
+    }
 
-        // Optional (only if your ImportWatcher supports it):
-        // _importWatcher.Stop();
+    private void EnsureImportDropFolderExists()
+    {
+        try
+        {
+            var folder = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "eFinance",
+                "ImportDrop");
+
+            Directory.CreateDirectory(folder);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine("EnsureImportDropFolderExists failed: " + ex);
+        }
     }
 
     private async Task InitializeLocalDatabaseAsync()
     {
         try
         {
-            // ✅ Make it obvious in output where the DB is
             System.Diagnostics.Debug.WriteLine($"USING DB AT: {_db.DatabasePath}");
 
-            // Create/upgrade schema
+            // Safe to call even if MauiProgram already initialized the schema
             await _db.InitializeAsync();
 
             // Seed Accounts if empty
             await _accounts.SeedDefaultsIfEmptyAsync();
 
-            // ✅ Seed OpeningBalances from OpeningBalance.csv ONLY if needed
+            // Seed OpeningBalances from OpeningBalance.csv (best-effort / safe)
             await SeedOpeningBalancesFromCsvIfNeededAsync();
         }
         catch (Exception ex)
@@ -120,14 +136,12 @@ public partial class App : Application
     {
         try
         {
-            // If you've already seeded once, skip.
             if (Preferences.Get(PrefOpeningBalancesSeeded, false))
                 return;
 
             using var conn = _db.OpenConnection();
 
-            // If table is missing (schema not updated yet), this will throw.
-            // That’s OK: it tells you InitializeAsync() doesn’t include OpeningBalances yet.
+            // If table is missing, this will throw; caught below (best-effort)
             using (var check = conn.CreateCommand())
             {
                 check.CommandText = "SELECT COUNT(1) FROM OpeningBalances;";
@@ -139,9 +153,6 @@ public partial class App : Application
                 }
             }
 
-            // Where is OpeningBalance.csv?
-            // Prefer: the same app data folder you already use for other files.
-            // If you have a helper, use it; otherwise use LocalAppData\eFinance\OpeningBalance.csv.
             var csvPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "eFinance",
@@ -149,7 +160,6 @@ public partial class App : Application
 
             if (!File.Exists(csvPath))
             {
-                // Nothing to seed, don't set the flag (you may add it later).
                 System.Diagnostics.Debug.WriteLine($"OpeningBalance.csv not found at: {csvPath}");
                 return;
             }
@@ -158,8 +168,6 @@ public partial class App : Application
             if (lines.Length <= 1)
                 return;
 
-            // Parse CSV: Date,Account,Balance
-            // Example: 2023-07-23,Amex,-4300.19
             var nowUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
 
             using var tx = conn.BeginTransaction();
@@ -169,7 +177,6 @@ public partial class App : Application
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 if (line.StartsWith("Date,", StringComparison.OrdinalIgnoreCase)) continue;
 
-                // Simple split (your file is simple: no quoted commas)
                 var parts = line.Split(',');
                 if (parts.Length < 3) continue;
 
@@ -186,7 +193,6 @@ public partial class App : Application
                         DateTimeStyles.None, out var dt))
                     continue;
 
-                // Allow commas/currency if someone edited it
                 balText = balText.Replace("$", "").Replace(",", "");
                 if (!decimal.TryParse(balText, NumberStyles.Number | NumberStyles.AllowLeadingSign,
                         CultureInfo.InvariantCulture, out var bal))
@@ -195,7 +201,6 @@ public partial class App : Application
                 using var cmd = conn.CreateCommand();
                 cmd.Transaction = tx;
 
-                // SQLite UPSERT (requires UNIQUE(AccountName) index)
                 cmd.CommandText = @"
 INSERT INTO OpeningBalances (AccountName, BalanceDate, Balance, CreatedUtc)
 VALUES ($name, $date, $bal, $createdUtc)
@@ -219,8 +224,7 @@ ON CONFLICT(AccountName) DO UPDATE SET
         }
         catch (SqliteException sx)
         {
-            // Most common reason: table doesn't exist yet because SqliteDatabase.InitializeAsync()
-            // hasn't been updated with OpeningBalances DDL.
+            // Most common reason: OpeningBalances table doesn't exist yet
             System.Diagnostics.Debug.WriteLine("SeedOpeningBalancesFromCsvIfNeededAsync SQLite error: " + sx.Message);
         }
         catch (Exception ex)
@@ -233,7 +237,6 @@ ON CONFLICT(AccountName) DO UPDATE SET
     {
         try
         {
-            // Don't create directories just to check availability.
             var baseDir = CloudSyncPathHelper.GetCloudSynceFinanceDirectory(createIfMissing: false);
 
             if (string.IsNullOrWhiteSpace(baseDir) || !Directory.Exists(baseDir))
@@ -270,7 +273,6 @@ ON CONFLICT(AccountName) DO UPDATE SET
                 return;
 
             var lastImported = Preferences.Get(PrefLastImported, string.Empty);
-
             if (string.Equals(lastImported, latestName, StringComparison.OrdinalIgnoreCase))
                 return;
 
