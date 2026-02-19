@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="eFinance.Pages.DuplicateAuditPage"
+             Title="Duplicate Audit">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="12">
+
+            <Button Text="Return"
+                    BackgroundColor="IndianRed"
+                    TextColor="White"
+                    FontSize="16"
+                    WidthRequest="220"
+                    HorizontalOptions="Start"
+                    Clicked="ReturnClicked" />
+            
+            <Label Text="Duplicate Audit"
+                   FontSize="22"
+                   FontAttributes="Bold"/>
+
+            <Button Text="Run Duplicate Audit"
+                    BackgroundColor="DarkSeaGreen"
+                    TextColor="Black"
+                    FontSize="18"
+                    WidthRequest="220"
+                    HorizontalOptions="Start"
+                    CornerRadius="8"
+                    Clicked="RunClicked" />
+
+            <Label x:Name="SummaryLabel" />
+
+            <CollectionView x:Name="ResultsView">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate>
+                        <Frame BorderColor="LightGray" Padding="10" Margin="0,6">
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="{Binding AccountName}" FontAttributes="Bold"/>
+                                <Label Text="{Binding Type}" />
+                                <Label Text="{Binding Reason}" />
+
+                                <Label Text="{Binding A_Date}" />
+                                <Label Text="{Binding A_Description}" />
+                                <Label Text="{Binding A_Amount}" />
+
+                                <Label Text="--- vs ---" />
+
+                                <Label Text="{Binding B_Date}" />
+                                <Label Text="{Binding B_Description}" />
+                                <Label Text="{Binding B_Amount}" />
+
+                                <Button Text="Accept (Not a Duplicate)"
+                                        BackgroundColor="CornflowerBlue"
+                                        TextColor="White"
+                                        FontSize="16"
+                                        WidthRequest="220"
+                                        HorizontalOptions="Start"
+                                        CornerRadius="8"
+                                        Clicked="AcceptClicked"
+                                        CommandParameter="{Binding}" />
+
+                            </VerticalStackLayout>
+                        </Frame>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>
