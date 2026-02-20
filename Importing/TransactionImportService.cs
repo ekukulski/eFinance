@@ -2,6 +2,7 @@
 using eFinance.Data;
 using eFinance.Data.Models;
 using eFinance.Services;
+using TransactionModel = eFinance.Data.Models.Transaction;
 
 namespace eFinance.Importing
 {

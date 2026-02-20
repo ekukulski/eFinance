@@ -1,5 +1,6 @@
 ﻿using eFinance.Data.Models;
 using eFinance.Data.Repositories;
+using TransactionModel = eFinance.Data.Models.Transaction;
 
 namespace eFinance.Importing
 {
