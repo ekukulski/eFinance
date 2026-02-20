@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    x:Class="eFinance.Pages.ImportFormatsPage"
+    Title="Import Formats">
+
+    <Grid RowDefinitions="Auto,*,Auto" Padding="12" RowSpacing="10">
+
+        <Button Text="Test CSV..."
+                Command="{Binding TestCsvCommand}" />
+
+        <CollectionView Grid.Row="1"
+                        ItemsSource="{Binding Importers}">
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <Frame Padding="10" Margin="0,0,0,10">
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="{Binding SourceName}"
+                                   FontAttributes="Bold"
+                                   FontSize="16" />
+                            <Label Text="{Binding AmountPolicy}"
+                                   FontSize="12" />
+                            <Label Text="{Binding HeaderHint}"
+                                   FontSize="12" />
+                        </VerticalStackLayout>
+                    </Frame>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <Label Grid.Row="2"
+               Text="{Binding LastTestResult}"
+               FontSize="12" />
+    </Grid>
+</ContentPage>

@@ -58,9 +58,6 @@ namespace eFinance.ViewModels
         // ------------------------------------------------------------
 
         [RelayCommand]
-        private Task OpenAMEXAsync() => OpenRegisterByAccountNameAsync("Amex");
-        
-        [RelayCommand]
         private async Task OpenAccountsAsync()
         {
             await _nav.GoToAsync(nameof(AccountsPage));
@@ -72,6 +69,12 @@ namespace eFinance.ViewModels
         [RelayCommand]
         private Task CategoriesAsync() => _nav.GoToAsync(nameof(CategoriesPage));
 
+        [RelayCommand]
+        private Task OpenImportFormatsAsync()
+        {
+            return _nav.GoToAsync(nameof(ImportFormatsPage));
+        }
+                
         [RelayCommand]
         private void Exit()
         {

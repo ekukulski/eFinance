@@ -1,4 +1,8 @@
-﻿using eFinance.ViewModels;
+﻿using System;
+using System.Threading.Tasks;
+using eFinance.Importing;
+using eFinance.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace eFinance.Pages;
 
@@ -6,6 +10,7 @@ namespace eFinance.Pages;
 public partial class RegisterPage : ContentPage
 {
     private RegisterViewModel? _vm;
+    private long _accountId;
 
     public RegisterPage()
     {
@@ -18,7 +23,6 @@ public partial class RegisterPage : ContentPage
             _vm = services?.GetRequiredService<RegisterViewModel>();
             if (_vm is null)
             {
-                // Don’t crash the whole app; show a helpful message and go back
                 _ = ShowAndGoBackAsync(
                     "RegisterViewModel is not available (DI). " +
                     "Add: builder.Services.AddTransient<RegisterViewModel>();");
@@ -33,7 +37,6 @@ public partial class RegisterPage : ContentPage
         }
     }
 
-    // Keep this constructor if you ever navigate to RegisterPage via DI directly
     public RegisterPage(RegisterViewModel vm) : this()
     {
         _vm = vm;
@@ -48,7 +51,42 @@ public partial class RegisterPage : ContentPage
                 return;
 
             if (long.TryParse(value, out var id) && id > 0)
-                _ = InitializeSafeAsync(id);
+            {
+                _accountId = id;
+
+                // ✅ set current import target here (no field needed)
+                try
+                {
+                    var services = Application.Current?.Handler?.MauiContext?.Services;
+                    var target = services?.GetService<IImportTargetContext>();
+                    if (target is not null)
+                        target.CurrentAccountId = _accountId;
+                }
+                catch
+                {
+                    // ignore; importing just won't be enabled
+                }
+
+                _ = InitializeSafeAsync(_accountId);
+            }
+        }
+    }
+
+    protected override void OnDisappearing()
+    {
+        base.OnDisappearing();
+
+        // Optional: clear import target if this page set it
+        try
+        {
+            var services = Application.Current?.Handler?.MauiContext?.Services;
+            var target = services?.GetService<IImportTargetContext>();
+            if (target is not null && target.CurrentAccountId == _accountId)
+                target.CurrentAccountId = null;
+        }
+        catch
+        {
+            // ignore
         }
     }
 
@@ -63,10 +101,11 @@ public partial class RegisterPage : ContentPage
             await DisplayAlert("eFinance", "Register init failed: " + ex.Message, "OK");
         }
     }
+
     private void SearchEntry_Completed(object sender, EventArgs e)
     {
         if (sender is Entry entry)
-            entry.Unfocus(); // dismiss keyboard
+            entry.Unfocus();
     }
 
     private async Task ShowAndGoBackAsync(string message)

@@ -3,34 +3,30 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using eFinance.Data.Repositories;
 using eFinance.Services;
 
 namespace eFinance.Importing
 {
-    public sealed class AmexImporter : IImporter
+    public sealed class BmoImporter : IImporter
     {
         private readonly AccountRepository _accounts;
         private readonly TransactionRepository _transactions;
         private readonly CategorizationService _categorizer;
 
-        // AMEX CSV convention is opposite of eFinance, so we invert.
-        private const AmountSignPolicy SignPolicy = AmountSignPolicy.Invert;
+        private const AmountSignPolicy SignPolicy = AmountSignPolicy.AsIs;
+        public AmountSignPolicy? AmountPolicy => SignPolicy;
 
-        public AmexImporter(
-            AccountRepository accounts,
-            TransactionRepository transactions,
-            CategorizationService categorizer)
+        public string SourceName => "BMO";
+        public string HeaderHint => "POSTED DATE, DESCRIPTION, AMOUNT, FI TRANSACTION REFERENCE, ...";
+
+        public BmoImporter(AccountRepository accounts, TransactionRepository transactions, CategorizationService categorizer)
         {
             _accounts = accounts ?? throw new ArgumentNullException(nameof(accounts));
             _transactions = transactions ?? throw new ArgumentNullException(nameof(transactions));
             _categorizer = categorizer ?? throw new ArgumentNullException(nameof(categorizer));
         }
-        public AmountSignPolicy? AmountPolicy => AmountSignPolicy.Invert;
-        public string SourceName => "AMEX";
-        public string HeaderHint => "Date, Description, Card Member, Account #, Amount";
 
         public bool CanImport(string filePath)
         {
@@ -38,34 +34,19 @@ namespace eFinance.Importing
             if (!filePath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)) return false;
             if (!File.Exists(filePath)) return false;
 
-            var fileName = Path.GetFileName(filePath);
-
-            // Convenience: allow historical naming AND AMEX default download name.
-            var nameLooksLikeAmex =
-                fileName.Contains("amex", StringComparison.OrdinalIgnoreCase) ||
-                fileName.Equals("activity.csv", StringComparison.OrdinalIgnoreCase);
-
-            // Strong check: detect AMEX by header columns.
-            // Expected header example:
-            // Date,Description,Card Member,Account #,Amount
+            // Strong check: detect by header columns.
+            // POSTED DATE,DESCRIPTION,AMOUNT,CURRENCY,TRANSACTION REFERENCE NUMBER,FI TRANSACTION REFERENCE,TYPE,CREDIT/DEBIT,ORIGINAL AMOUNT
             var header = File.ReadLines(filePath).FirstOrDefault();
-            if (!string.IsNullOrWhiteSpace(header))
-            {
-                var cols = header.Split(',')
-                                 .Select(c => c.Trim().Trim('"'))
-                                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(header)) return false;
 
-                bool hasAmexHeaders =
-                    cols.Contains("Date") &&
-                    cols.Contains("Description") &&
-                    cols.Contains("Account #") &&
-                    cols.Contains("Amount");
+            var cols = header.Split(',')
+                             .Select(c => c.Trim().Trim('"'))
+                             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-                if (hasAmexHeaders)
-                    return true;
-            }
-
-            return nameLooksLikeAmex;
+            return cols.Contains("POSTED DATE")
+                && cols.Contains("DESCRIPTION")
+                && cols.Contains("AMOUNT")
+                && cols.Contains("FI TRANSACTION REFERENCE");
         }
 
         public async Task<ImportResult> ImportAsync(string filePath, long accountId)
@@ -77,29 +58,15 @@ namespace eFinance.Importing
             int ignored = 0;
             int failed = 0;
 
-        // Prevent legit duplicates from colliding on FitId:
-        // base key + occurrence number (001, 002, ...)
-        var occurrenceByBaseKey = new Dictionary<string, int>(StringComparer.Ordinal);
-
             foreach (var row in CsvReader.Read(filePath))
             {
                 try
                 {
-                    var dateText = FirstNonNull(row,
-                        "Date", "Posted Date", "POSTED DATE", "Transaction Date", "Trans Date");
-
-                    var desc = FirstNonNull(row,
-                        "Description", "DESCRIPTION", "Merchant", "Payee");
-
-                    var amountText = FirstNonNull(row,
-                        "Amount", "AMOUNT", "Charge Amount", "Transaction Amount");
-
-                    var accountNo = FirstNonNull(row,
-                        "Account #", "Account", "Account Number");
-
-                    // Include Card Member if present (reduces collisions further).
-                    var cardMember = FirstNonNull(row,
-                        "Card Member", "CardMember", "CARD MEMBER");
+                    var dateText = FirstNonNull(row, "POSTED DATE", "Posted Date", "Date");
+                    var desc = FirstNonNull(row, "DESCRIPTION", "Description");
+                    var amountText = FirstNonNull(row, "AMOUNT", "Amount");
+                    var fiRef = FirstNonNull(row, "FI TRANSACTION REFERENCE", "FI Transaction Reference");
+                    var txnRef = FirstNonNull(row, "TRANSACTION REFERENCE NUMBER", "Transaction Reference Number");
 
                     if (dateText is null || desc is null || amountText is null)
                     {
@@ -108,29 +75,12 @@ namespace eFinance.Importing
                     }
 
                     var date = ParseDate(dateText);
-
-                    // Parse CSV amount then normalize to eFinance convention using policy.
-                    // AMEX: charges positive, credits/payments negative
-                    // eFinance: charges negative, credits/payments positive
-                    // => Invert
                     var csvAmount = ParseDecimal(amountText);
                     var amount = AmountNormalizer.Normalize(csvAmount, SignPolicy);
 
-                    // Build stable, collision-resistant FitId.
-                    var normDesc = NormalizeKeyText(desc);
-                    var normAcct = NormalizeKeyText(accountNo);
-                    var normMember = NormalizeKeyText(cardMember);
-
-                    // Normalize amount text so 12.3 and 12.30 are identical in the key.
-                    var normAmountText = amount.ToString("0.00", CultureInfo.InvariantCulture);
-
-                    var baseKey = $"{date:yyyyMMdd}|{normAcct}|{normMember}|{normAmountText}|{normDesc}";
-
-                    occurrenceByBaseKey.TryGetValue(baseKey, out var n);
-                    n++;
-                    occurrenceByBaseKey[baseKey] = n;
-
-                    var fitId = $"{baseKey}|{n:D3}";
+                    // Prefer FI TRANSACTION REFERENCE (best unique key)
+                    // Fallback to a composite if missing.
+                    var fitId = BuildFitId(date, desc, amount, fiRef, txnRef);
 
                     var transaction = new eFinance.Data.Models.Transaction
                     {
@@ -138,7 +88,7 @@ namespace eFinance.Importing
                         PostedDate = date,
                         Description = desc,
                         Amount = amount,
-                        Category = null, // legacy; keep null
+                        Category = null, // legacy
                         FitId = fitId,
                         Source = SourceName,
                         CreatedUtc = DateTime.UtcNow
@@ -161,14 +111,22 @@ namespace eFinance.Importing
                 catch (Exception ex)
                 {
                     failed++;
-                    System.Diagnostics.Debug.WriteLine("AMEX import row failed: " + ex);
+                    System.Diagnostics.Debug.WriteLine("BMO import row failed: " + ex);
                 }
             }
 
-            System.Diagnostics.Debug.WriteLine(
-                $"AMEX import finished. Inserted={inserted}, Ignored={ignored}, Failed={failed}");
-
             return new ImportResult(inserted, ignored, failed);
+        }
+
+        private static string BuildFitId(DateOnly date, string desc, decimal amount, string? fiRef, string? txnRef)
+        {
+            if (!string.IsNullOrWhiteSpace(fiRef))
+                return $"BMO|FI|{fiRef.Trim()}";
+
+            if (!string.IsNullOrWhiteSpace(txnRef))
+                return $"BMO|TRN|{txnRef.Trim()}|{date:yyyyMMdd}|{amount.ToString("0.00", CultureInfo.InvariantCulture)}|{NormalizeKeyText(desc)}";
+
+            return $"BMO|{date:yyyyMMdd}|{amount.ToString("0.00", CultureInfo.InvariantCulture)}|{NormalizeKeyText(desc)}";
         }
 
         private static string? FirstNonNull(CsvRow row, params string[] names)
@@ -182,17 +140,12 @@ namespace eFinance.Importing
             return null;
         }
 
-        /// <summary>
-        /// Normalizes text for key generation (FitId base key).
-        /// </summary>
         private static string NormalizeKeyText(string? text)
         {
             if (string.IsNullOrWhiteSpace(text))
                 return string.Empty;
 
             var s = text.Trim();
-
-            // collapse whitespace
             while (s.Contains("  ", StringComparison.Ordinal))
                 s = s.Replace("  ", " ", StringComparison.Ordinal);
 

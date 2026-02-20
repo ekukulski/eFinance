@@ -1,10 +1,13 @@
-﻿using eFinance.Data;
+﻿using System;
+using System.IO;
+using eFinance.Data;
 using eFinance.Data.Repositories;
 using eFinance.Importing;
 using eFinance.Pages;
 using eFinance.Services;
 using eFinance.ViewModels;
 using LiveChartsCore.SkiaSharpView.Maui;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.LifecycleEvents;
 using SkiaSharp.Views.Maui.Controls.Hosting;
@@ -48,7 +51,6 @@ public static class MauiProgram
 
             var db = new SqliteDatabase(dbPath);
             db.InitializeAsync().GetAwaiter().GetResult();
-
             return db;
         });
 
@@ -59,6 +61,10 @@ public static class MauiProgram
         builder.Services.AddSingleton<TransactionRepository>();
         builder.Services.AddSingleton<OpeningBalanceRepository>();
         builder.Services.AddSingleton<CategoryRepository>();
+
+        // ------------------------------------------------------------
+        // Domain / app services
+        // ------------------------------------------------------------
         builder.Services.AddSingleton<CategorizationService>();
 
         // ------------------------------------------------------------
@@ -73,13 +79,20 @@ public static class MauiProgram
         // ------------------------------------------------------------
         // Importing pipeline
         // ------------------------------------------------------------
+        builder.Services.AddSingleton<IImportTargetContext, ImportTargetContext>();
+
         builder.Services.AddSingleton<IImporter, AmexImporter>();
+        builder.Services.AddSingleton<IImporter, BmoImporter>();
+        builder.Services.AddSingleton<IImporter, ChaseVisaImporter>();
+        builder.Services.AddSingleton<IImporter, CitiMastercardImporter>();
+
         builder.Services.AddSingleton<ImportPipeline>();
 
         builder.Services.AddSingleton(sp =>
         {
             var pipeline = sp.GetRequiredService<ImportPipeline>();
-            return new ImportWatcher(importDropDir, pipeline);
+            var target = sp.GetRequiredService<IImportTargetContext>();
+            return new ImportWatcher(importDropDir, pipeline, target);
         });
 
         // ------------------------------------------------------------
@@ -92,6 +105,7 @@ public static class MauiProgram
         builder.Services.AddTransient<DeletedTransactionsViewModel>();
         builder.Services.AddTransient<CategoriesViewModel>();
         builder.Services.AddTransient<AccountsViewModel>();
+        builder.Services.AddTransient<ImportFormatsViewModel>();
 
         // ------------------------------------------------------------
         // Pages
@@ -100,10 +114,10 @@ public static class MauiProgram
         builder.Services.AddTransient<RegisterPage>();
         builder.Services.AddTransient<DuplicateAuditPage>();
         builder.Services.AddTransient<CategoriesPage>();
-        builder.Services.AddTransient<CategoriesPage>();
         builder.Services.AddTransient<TransactionEditPage>();
         builder.Services.AddTransient<DeletedTransactionsPage>();
         builder.Services.AddTransient<AccountsPage>();
+        builder.Services.AddTransient<ImportFormatsPage>();
 
         // ------------------------------------------------------------
         // Shell

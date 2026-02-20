@@ -21,6 +21,7 @@ public partial class AppShell : Shell
         Routing.RegisterRoute(nameof(CategoriesPage), new DiRouteFactory(typeof(CategoriesPage)));
         Routing.RegisterRoute(nameof(TransactionEditPage), new DiRouteFactory(typeof(TransactionEditPage)));
         Routing.RegisterRoute(nameof(DeletedTransactionsPage), typeof(DeletedTransactionsPage));
+        Routing.RegisterRoute(nameof(ImportFormatsPage), typeof(ImportFormatsPage));
 
         Navigated += (_, __) =>
         {

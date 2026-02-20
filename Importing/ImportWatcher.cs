@@ -1,4 +1,8 @@
-﻿using System.Collections.Concurrent;
+﻿using System;
+using System.Collections.Concurrent;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace eFinance.Importing
 {
@@ -6,6 +10,7 @@ namespace eFinance.Importing
     {
         private readonly FileSystemWatcher _watcher;
         private readonly ImportPipeline _pipeline;
+        private readonly IImportTargetContext _target;
 
         private readonly ConcurrentDictionary<string, DateTime> _pending = new();
         private readonly Timer _timer;
@@ -13,10 +18,13 @@ namespace eFinance.Importing
         private readonly string _folderPath;
         private readonly string _archiveFolderPath;
 
-        public ImportWatcher(string folderPath, ImportPipeline pipeline)
+        public ImportWatcher(string folderPath, ImportPipeline pipeline, IImportTargetContext target)
         {
-            if (string.IsNullOrWhiteSpace(folderPath)) throw new ArgumentNullException(nameof(folderPath));
+            if (string.IsNullOrWhiteSpace(folderPath))
+                throw new ArgumentNullException(nameof(folderPath));
+
             _pipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
+            _target = target ?? throw new ArgumentNullException(nameof(target));
 
             _folderPath = folderPath;
             _archiveFolderPath = Path.Combine(_folderPath, "Archive");
@@ -108,15 +116,26 @@ namespace eFinance.Importing
                     if (!await WaitForFileReadyAsync(path))
                         continue;
 
+                    // NEW: Require an active target account (currently open register)
+                    var accountId = _target.CurrentAccountId;
+                    if (accountId is null || accountId <= 0)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"Import skipped for '{Path.GetFileName(path)}' because no account is currently selected. File left in ImportDrop.");
+                        continue;
+                    }
+
                     // Run pipeline
                     try
                     {
-                        var result = await _pipeline.ImportAsync(path);
+                        // NOTE: This requires ImportPipeline to have an overload:
+                        //   Task<ImportResult> ImportAsync(string filePath, long accountId)
+                        var result = await _pipeline.ImportAsync(path, accountId.Value);
 
                         System.Diagnostics.Debug.WriteLine(
-                            $"Imported '{Path.GetFileName(path)}': inserted={result.Inserted}, ignored={result.Ignored}, failed={result.Failed}");
+                            $"Imported '{Path.GetFileName(path)}' into accountId={accountId.Value}: inserted={result.Inserted}, ignored={result.Ignored}, failed={result.Failed}");
 
-                        // ✅ Archive only if we actually processed anything (inserted or ignored).
+                        // Archive only if we actually processed anything (inserted or ignored).
                         // If everything failed, leave it in place for inspection.
                         if (result.Inserted + result.Ignored > 0)
                         {
