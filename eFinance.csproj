@@ -80,6 +80,9 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<MauiXaml Update="Pages\AccountsPage.xaml">
+		  <Generator>MSBuild:Compile</Generator>
+		</MauiXaml>
 		<MauiXaml Update="Pages\DeletedTransactionsPage.xaml">
 		  <Generator>MSBuild:Compile</Generator>
 		</MauiXaml>

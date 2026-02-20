@@ -15,6 +15,7 @@ public partial class AppShell : Shell
         _windowSizer = windowSizer;
 
         // Register routes via DI so pages can have constructor injection
+        Routing.RegisterRoute(nameof(AccountsPage), typeof(AccountsPage));
         Routing.RegisterRoute(nameof(RegisterPage), new DiRouteFactory(typeof(RegisterPage)));
         Routing.RegisterRoute(nameof(DuplicateAuditPage), new DiRouteFactory(typeof(DuplicateAuditPage)));
         Routing.RegisterRoute(nameof(CategoriesPage), new DiRouteFactory(typeof(CategoriesPage)));

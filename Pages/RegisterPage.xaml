@@ -69,6 +69,11 @@
                     AlignItems="Start"
                     JustifyContent="Start">
 
+            <Button Text="Refresh"
+                    Margin="0,0,8,8"
+                    Style="{StaticResource NeutralButtonStyle}"
+                    Command="{Binding RefreshCommand}" />
+
             <Button Text="Add New Transactions"
                     Margin="0,0,8,8"
                     Style="{StaticResource NeutralButtonStyle}"
@@ -118,14 +123,6 @@
                    FontAttributes="Bold"
                    VerticalTextAlignment="Center"
                    TextColor="{Binding CurrentBalance, Converter={StaticResource AmountColorConverter}}" />
-
-            <!-- spacer in column 2 -->
-
-            <Button Grid.Column="3"
-                    Text="Refresh"
-                    Style="{StaticResource NeutralButtonStyle}"
-                    Command="{Binding RefreshCommand}" />
-
         </Grid>
 
         <!-- Search box -->

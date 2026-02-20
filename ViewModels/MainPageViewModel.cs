@@ -59,7 +59,13 @@ namespace eFinance.ViewModels
 
         [RelayCommand]
         private Task OpenAMEXAsync() => OpenRegisterByAccountNameAsync("Amex");
-
+        
+        [RelayCommand]
+        private async Task OpenAccountsAsync()
+        {
+            await _nav.GoToAsync(nameof(AccountsPage));
+        }
+        
         [RelayCommand]
         private Task OpenDuplicateAuditAsync() => _nav.GoToAsync(nameof(DuplicateAuditPage));
 

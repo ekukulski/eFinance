@@ -91,6 +91,8 @@ public static class MauiProgram
         builder.Services.AddTransient<DuplicateAuditViewModel>();
         builder.Services.AddTransient<DeletedTransactionsViewModel>();
         builder.Services.AddTransient<CategoriesViewModel>();
+        builder.Services.AddTransient<AccountsViewModel>();
+
         // ------------------------------------------------------------
         // Pages
         // ------------------------------------------------------------
@@ -101,6 +103,7 @@ public static class MauiProgram
         builder.Services.AddTransient<CategoriesPage>();
         builder.Services.AddTransient<TransactionEditPage>();
         builder.Services.AddTransient<DeletedTransactionsPage>();
+        builder.Services.AddTransient<AccountsPage>();
 
         // ------------------------------------------------------------
         // Shell
