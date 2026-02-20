@@ -1,7 +1,4 @@
-﻿using System.Threading.Tasks;
-using Microsoft.Maui.Controls;
-
-namespace eFinance.Services;
+﻿namespace eFinance.Services;
 
 public sealed class DialogService : IDialogService
 {

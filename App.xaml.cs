@@ -1,16 +1,9 @@
-﻿using System;
-using System.Globalization;
-using System.IO;
-using System.Threading.Tasks;
+﻿using System.Globalization;
 using eFinance.Data;
 using eFinance.Data.Repositories;
-using eFinance.Helpers;
 using eFinance.Importing;
 using eFinance.Services;
 using Microsoft.Data.Sqlite;
-using Microsoft.Maui.Dispatching;
-using Microsoft.Maui.Storage;
-using TransactionModel = eFinance.Data.Models.Transaction;
 
 namespace eFinance;
 

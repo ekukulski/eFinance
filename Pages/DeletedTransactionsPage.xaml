@@ -12,8 +12,7 @@
         <!-- Top buttons -->
         <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
             <Button Text="Back"
-                    BackgroundColor="IndianRed"
-                    TextColor="White"
+                    Style="{StaticResource DangerButtonStyle}"
                     Command="{Binding BackCommand}" />
 
             <Label Grid.Column="1"
@@ -25,8 +24,7 @@
 
             <Button Grid.Column="2"
                     Text="Restore All"
-                    BackgroundColor="DarkSeaGreen"
-                    TextColor="Black"
+                    Style="{StaticResource SuccessButtonStyle}"
                     Command="{Binding RestoreAllCommand}" />
         </Grid>
 
@@ -76,8 +74,7 @@
 
                                 <Button Grid.Column="1"
                                         Text="Restore"
-                                        BackgroundColor="CornflowerBlue"
-                                        TextColor="White"
+                                        Style="{StaticResource InfoButtonStyle}"
                                         Padding="10,6"
                                         Command="{Binding Source={RelativeSource AncestorType={x:Type vm:DeletedTransactionsViewModel}}, Path=RestoreCommand}"
                                         CommandParameter="{Binding .}" />

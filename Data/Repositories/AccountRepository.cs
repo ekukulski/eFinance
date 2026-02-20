@@ -1,24 +1,19 @@
-﻿using Microsoft.Data.Sqlite;
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Threading.Tasks;
+﻿using System.Globalization;
 using eFinance.Data.Models;
-using TransactionModel = eFinance.Data.Models.Transaction;
-
+using Microsoft.Data.Sqlite;
 
 namespace eFinance.Data.Repositories
 {
     /// <summary>
-    /// Accounts repository matching your current DB schema:
+    /// Accounts repository matching the NEW DB schema:
     ///
     /// CREATE TABLE Accounts (
     ///   Id INTEGER PRIMARY KEY AUTOINCREMENT,
     ///   Name TEXT NOT NULL,
-    ///   CreatedUtc TEXT NOT NULL
+    ///   CreatedUtc TEXT NOT NULL,
+    ///   AccountType TEXT NOT NULL DEFAULT 'Checking',
+    ///   IsActive INTEGER NOT NULL DEFAULT 1
     /// );
-    ///
-    /// (No AccountType, no IsActive)
     /// </summary>
     public sealed class AccountRepository
     {
@@ -41,18 +36,23 @@ namespace eFinance.Data.Repositories
             if (account.CreatedUtc == default)
                 account.CreatedUtc = DateTime.UtcNow;
 
+            // Defaults
+            account.AccountType = string.IsNullOrWhiteSpace(account.AccountType) ? "Checking" : account.AccountType.Trim();
+
             using var conn = _db.OpenConnection();
             using var cmd = conn.CreateCommand();
 
             cmd.CommandText = @"
-INSERT INTO Accounts (Name, CreatedUtc)
-VALUES ($name, $createdUtc);
+INSERT INTO Accounts (Name, CreatedUtc, AccountType, IsActive)
+VALUES ($name, $createdUtc, $type, $active);
 SELECT last_insert_rowid();
 ";
             cmd.Parameters.AddWithValue("$name", account.Name.Trim());
             cmd.Parameters.AddWithValue("$createdUtc", account.CreatedUtc.ToString("O"));
+            cmd.Parameters.AddWithValue("$type", account.AccountType);
+            cmd.Parameters.AddWithValue("$active", account.IsActive ? 1 : 0);
 
-            var id = (long)(await cmd.ExecuteScalarAsync() ?? 0L);
+            var id = Convert.ToInt64(await cmd.ExecuteScalarAsync() ?? 0L, CultureInfo.InvariantCulture);
             account.Id = id;
             return id;
         }
@@ -66,8 +66,32 @@ SELECT last_insert_rowid();
             using var cmd = conn.CreateCommand();
 
             cmd.CommandText = @"
-SELECT Id, Name, CreatedUtc
+SELECT Id, Name, CreatedUtc, AccountType, IsActive
 FROM Accounts
+ORDER BY Name COLLATE NOCASE;
+";
+
+            var results = new List<Account>();
+            using var r = await cmd.ExecuteReaderAsync();
+
+            while (await r.ReadAsync())
+                results.Add(ReadAccount(r));
+
+            return results;
+        }
+
+        // ------------------------------------------------------------
+        // GET ALL ACTIVE
+        // ------------------------------------------------------------
+        public async Task<List<Account>> GetAllActiveAsync()
+        {
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            cmd.CommandText = @"
+SELECT Id, Name, CreatedUtc, AccountType, IsActive
+FROM Accounts
+WHERE IsActive = 1
 ORDER BY Name COLLATE NOCASE;
 ";
 
@@ -91,7 +115,7 @@ ORDER BY Name COLLATE NOCASE;
             using var cmd = conn.CreateCommand();
 
             cmd.CommandText = @"
-SELECT Id, Name, CreatedUtc
+SELECT Id, Name, CreatedUtc, AccountType, IsActive
 FROM Accounts
 WHERE Id = $id
 LIMIT 1;
@@ -117,7 +141,7 @@ LIMIT 1;
             using var cmd = conn.CreateCommand();
 
             cmd.CommandText = @"
-SELECT Id, Name, CreatedUtc
+SELECT Id, Name, CreatedUtc, AccountType, IsActive
 FROM Accounts
 WHERE Name = $name COLLATE NOCASE
 LIMIT 1;
@@ -158,7 +182,41 @@ LIMIT 1;
         }
 
         // ------------------------------------------------------------
-        // UPDATE NAME
+        // UPDATE (Full)
+        // ------------------------------------------------------------
+        public async Task<bool> UpdateAsync(Account account)
+        {
+            if (account is null) throw new ArgumentNullException(nameof(account));
+            if (account.Id <= 0) throw new ArgumentOutOfRangeException(nameof(account.Id));
+            if (string.IsNullOrWhiteSpace(account.Name))
+                throw new ArgumentException("Account.Name is required.", nameof(account));
+
+            var name = account.Name.Trim();
+            var type = string.IsNullOrWhiteSpace(account.AccountType) ? "Checking" : account.AccountType.Trim();
+            var active = account.IsActive ? 1 : 0;
+
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            cmd.CommandText = @"
+UPDATE Accounts
+SET Name = $name,
+    AccountType = $type,
+    IsActive = $active
+WHERE Id = $id;
+SELECT changes();
+";
+            cmd.Parameters.AddWithValue("$id", account.Id);
+            cmd.Parameters.AddWithValue("$name", name);
+            cmd.Parameters.AddWithValue("$type", type);
+            cmd.Parameters.AddWithValue("$active", active);
+
+            var changed = Convert.ToInt64(await cmd.ExecuteScalarAsync() ?? 0L, CultureInfo.InvariantCulture);
+            return changed > 0;
+        }
+
+        // ------------------------------------------------------------
+        // UPDATE NAME (kept for compatibility)
         // ------------------------------------------------------------
         public async Task<bool> UpdateNameAsync(long accountId, string newName)
         {
@@ -178,12 +236,34 @@ SELECT changes();
             cmd.Parameters.AddWithValue("$id", accountId);
             cmd.Parameters.AddWithValue("$name", newName.Trim());
 
-            var changed = (long)(await cmd.ExecuteScalarAsync() ?? 0L);
+            var changed = Convert.ToInt64(await cmd.ExecuteScalarAsync() ?? 0L, CultureInfo.InvariantCulture);
             return changed > 0;
         }
 
         // ------------------------------------------------------------
-        // DELETE
+        // SOFT DELETE (recommended): IsActive = 0
+        // ------------------------------------------------------------
+        public async Task<bool> DeactivateByIdAsync(long id)
+        {
+            if (id <= 0) throw new ArgumentOutOfRangeException(nameof(id));
+
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            cmd.CommandText = @"
+UPDATE Accounts
+SET IsActive = 0
+WHERE Id = $id;
+SELECT changes();
+";
+            cmd.Parameters.AddWithValue("$id", id);
+
+            var changed = Convert.ToInt64(await cmd.ExecuteScalarAsync() ?? 0L, CultureInfo.InvariantCulture);
+            return changed > 0;
+        }
+
+        // ------------------------------------------------------------
+        // HARD DELETE (kept for compatibility)
         // ------------------------------------------------------------
         public async Task<bool> DeleteByIdAsync(long id)
         {
@@ -199,7 +279,7 @@ SELECT changes();
 ";
             cmd.Parameters.AddWithValue("$id", id);
 
-            var changed = (long)(await cmd.ExecuteScalarAsync() ?? 0L);
+            var changed = Convert.ToInt64(await cmd.ExecuteScalarAsync() ?? 0L, CultureInfo.InvariantCulture);
             return changed > 0;
         }
 
@@ -221,26 +301,28 @@ SELECT changes();
             // 2) Seed
             var defaults = new[]
             {
-                "AMEX",
-                "Visa",
-                "Mastercard",
-                "Checking"
+                new Account { Name = "AMEX",       AccountType = "CreditCard", IsActive = true },
+                new Account { Name = "Visa",       AccountType = "CreditCard", IsActive = true },
+                new Account { Name = "Mastercard", AccountType = "CreditCard", IsActive = true },
+                new Account { Name = "Checking",   AccountType = "Checking",   IsActive = true }
             };
 
             using var tx = conn.BeginTransaction();
             var now = DateTime.UtcNow.ToString("O");
 
-            foreach (var name in defaults)
+            foreach (var a in defaults)
             {
                 using var cmd = conn.CreateCommand();
                 cmd.Transaction = tx;
 
                 cmd.CommandText = @"
-INSERT INTO Accounts (Name, CreatedUtc)
-VALUES ($name, $utc);
+INSERT INTO Accounts (Name, CreatedUtc, AccountType, IsActive)
+VALUES ($name, $utc, $type, $active);
 ";
-                cmd.Parameters.AddWithValue("$name", name);
+                cmd.Parameters.AddWithValue("$name", a.Name);
                 cmd.Parameters.AddWithValue("$utc", now);
+                cmd.Parameters.AddWithValue("$type", string.IsNullOrWhiteSpace(a.AccountType) ? "Checking" : a.AccountType.Trim());
+                cmd.Parameters.AddWithValue("$active", a.IsActive ? 1 : 0);
 
                 await cmd.ExecuteNonQueryAsync();
             }
@@ -253,12 +335,24 @@ VALUES ($name, $utc);
         // ------------------------------------------------------------
         private static Account ReadAccount(SqliteDataReader r)
         {
-            // Column order: Id, Name, CreatedUtc
+            // Using ordinals by name is safer if column order changes.
+            var id = r.GetInt64(r.GetOrdinal("Id"));
+            var name = r.GetString(r.GetOrdinal("Name"));
+            var createdUtc = DateTime.Parse(r.GetString(r.GetOrdinal("CreatedUtc")), null, DateTimeStyles.RoundtripKind);
+
+            var typeOrdinal = r.GetOrdinal("AccountType");
+            var activeOrdinal = r.GetOrdinal("IsActive");
+
+            var accountType = r.IsDBNull(typeOrdinal) ? "Checking" : r.GetString(typeOrdinal);
+            var isActive = !r.IsDBNull(activeOrdinal) && r.GetInt64(activeOrdinal) == 1;
+
             return new Account
             {
-                Id = r.GetInt64(0),
-                Name = r.GetString(1),
-                CreatedUtc = DateTime.Parse(r.GetString(2), null, DateTimeStyles.RoundtripKind)
+                Id = id,
+                Name = name,
+                CreatedUtc = createdUtc,
+                AccountType = accountType,
+                IsActive = isActive
             };
         }
     }

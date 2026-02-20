@@ -1,16 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Globalization;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using eFinance.Data.Repositories;
 using eFinance.Pages;
-using Microsoft.Maui.ApplicationModel.DataTransfer;
-using Microsoft.Maui.Controls;
 using TransactionModel = eFinance.Data.Models.Transaction;
 
 namespace eFinance.ViewModels;
@@ -35,12 +29,14 @@ public sealed partial class RegisterViewModel : ObservableObject
         _accounts = accounts ?? throw new ArgumentNullException(nameof(accounts));
         _openingBalances = openingBalances ?? throw new ArgumentNullException(nameof(openingBalances));
     }
-
+    
     [ObservableProperty] private long accountId;
     [ObservableProperty] private string title = "Register";
     [ObservableProperty] private decimal currentBalance;
 
+    // Selection in UI
     [ObservableProperty] private RegisterRow? selectedRow;
+    private RegisterRow? _lastSelected;
 
     // Search box binds to this
     [ObservableProperty] private string searchText = "";
@@ -49,9 +45,18 @@ public sealed partial class RegisterViewModel : ObservableObject
     public ObservableCollection<RegisterRow> Items { get; } = new();
 
     // Auto-called by CommunityToolkit when SearchText changes
-    partial void OnSearchTextChanged(string value)
+    partial void OnSearchTextChanged(string value) => ApplyFilter();
+
+    // Auto-called by CommunityToolkit when SelectedRow changes
+    partial void OnSelectedRowChanged(RegisterRow? value)
     {
-        ApplyFilter();
+        if (_lastSelected != null)
+            _lastSelected.IsSelected = false;
+
+        if (value != null)
+            value.IsSelected = true;
+
+        _lastSelected = value;
     }
 
     public async Task InitializeAsync(long accountId)
@@ -184,7 +189,7 @@ public sealed partial class RegisterViewModel : ObservableObject
                 PostedDate = obDate,
                 Description = "OPENING BALANCE",
                 Amount = 0m,
-                Category = null,   // legacy display field
+                Category = null,
                 CategoryId = null,
                 Memo = null
             },
@@ -200,14 +205,17 @@ public sealed partial class RegisterViewModel : ObservableObject
         // UI shows newest at top
         rowsAsc.Reverse();
 
-        // Store master list (unfiltered)
+        for (int i = 0; i < rowsAsc.Count; i++)
+            rowsAsc[i].RowIndex = i;
+
         _allRows.Clear();
         _allRows.AddRange(rowsAsc);
 
-        // Update summary
         CurrentBalance = running;
 
-        // Populate Items based on current SearchText
+        // Clear selection when we refresh the list
+        SelectedRow = null;
+
         ApplyFilter();
     }
 
@@ -217,7 +225,6 @@ public sealed partial class RegisterViewModel : ObservableObject
 
         var raw = (SearchText ?? "").Trim();
 
-        // Empty => show all
         if (string.IsNullOrWhiteSpace(raw))
         {
             foreach (var r in _allRows)
@@ -225,7 +232,6 @@ public sealed partial class RegisterViewModel : ObservableObject
             return;
         }
 
-        // 1) Money search: supports 39.00, $39.00, (39.00), ($39.00), -39.00
         if (TryParseMoneyRobust(raw, out var money))
         {
             var target = Round2(money);
@@ -235,7 +241,6 @@ public sealed partial class RegisterViewModel : ObservableObject
             {
                 var amt = Round2(r.Transaction.Amount);
 
-                // Match exact OR absolute (so 39 matches -39)
                 if (amt == target || Math.Abs(amt) == Math.Abs(target))
                 {
                     Items.Add(r);
@@ -245,10 +250,8 @@ public sealed partial class RegisterViewModel : ObservableObject
 
             if (foundAny)
                 return;
-            // else fall through to text search so you don't get a blank list
         }
 
-        // 2) Text search
         var qLower = raw.ToLowerInvariant();
 
         foreach (var r in _allRows)
@@ -281,13 +284,10 @@ public sealed partial class RegisterViewModel : ObservableObject
 
         var s = input.Trim();
 
-        // Parentheses mean negative: (39.00) or ($39.00)
         var isParenNeg = s.StartsWith("(") && s.EndsWith(")");
         if (isParenNeg)
             s = s.Substring(1, s.Length - 2);
 
-        // Keep only digits, one dot, and a leading minus.
-        // (strips $, commas, spaces, etc.)
         var sb = new StringBuilder();
         bool sawDot = false;
 
@@ -332,25 +332,25 @@ public sealed partial class RegisterViewModel : ObservableObject
             return Task.CompletedTask;
         }
     }
+}
+public partial class RegisterRow : ObservableObject
+{
+    public TransactionModel Transaction { get; }
+    public DateOnly PostedDate { get; }
+    public string Description => Transaction.Description ?? "";
+    public string Category => Transaction.Category ?? "";
+    public decimal Amount => Transaction.Amount;
+    public decimal Balance { get; }
 
-    public sealed class RegisterRow
+    public int RowIndex { get; set; }   // ← ADD THIS
+
+    [ObservableProperty]
+    private bool isSelected;
+
+    public RegisterRow(TransactionModel transaction, decimal balance)
     {
-        public RegisterRow(TransactionModel transaction, decimal balance)
-        {
-            Transaction = transaction;
-            Balance = balance;
-        }
-
-        public TransactionModel Transaction { get; }
-
-        public long Id => Transaction.Id;
-        public DateOnly PostedDate => Transaction.PostedDate;
-        public string Description => Transaction.Description;
-        public decimal Amount => Transaction.Amount;
-
-        // Keep for display compatibility; long-term you’ll display Name via JOIN/lookup
-        public string? Category => Transaction.Category;
-
-        public decimal Balance { get; }
+        Transaction = transaction;
+        PostedDate = transaction.PostedDate;
+        Balance = balance;
     }
 }

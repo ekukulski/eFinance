@@ -1,10 +1,4 @@
 ﻿using Microsoft.Data.Sqlite;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
-using eFinance.Helpers;
 
 namespace eFinance.Data
 {
@@ -64,9 +58,9 @@ PRAGMA synchronous = NORMAL;
 CREATE TABLE IF NOT EXISTS Accounts (
     Id              INTEGER PRIMARY KEY AUTOINCREMENT,
     Name            TEXT NOT NULL,
-    AccountType     TEXT NOT NULL,          -- e.g., 'CreditCard', 'Checking'
-    IsActive        INTEGER NOT NULL DEFAULT 1,
-    CreatedUtc      TEXT NOT NULL
+    CreatedUtc      TEXT NOT NULL,
+    AccountType     TEXT NOT NULL DEFAULT 'Checking',
+    IsActive        INTEGER NOT NULL DEFAULT 1
 );
 
 -- ------------------------------------------------------------
@@ -177,6 +171,8 @@ ON DuplicateAuditIgnores(B_TransactionId);
             await EnsureColumnAsync(conn, "Transactions", "CategorizedUtc", "TEXT NULL");
             await EnsureColumnAsync(conn, "Transactions", "Memo", "TEXT NULL");
             await EnsureColumnAsync(conn, "Transactions", "IsDeleted", "INTEGER NOT NULL DEFAULT 0");
+            await EnsureColumnAsync(conn, "Accounts", "AccountType", "TEXT NOT NULL DEFAULT 'Checking'");
+            await EnsureColumnAsync(conn, "Accounts", "IsActive", "INTEGER NOT NULL DEFAULT 1");
 
             // Helpful indexes for the new columns
             await ExecuteNonQueryAsync(conn, @"
@@ -307,14 +303,31 @@ WHERE CategoryId IS NULL
         // -----------------------------
         // Helpers / migrations
         // -----------------------------
-        private static async Task EnsureColumnAsync(SqliteConnection conn, string table, string column, string ddlType)
+        private static async Task EnsureColumnAsync(SqliteConnection conn, string table, string column, string definition)
         {
-            if (await ColumnExistsAsync(conn, table, column))
-                return;
+            // Check existing columns
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"PRAGMA table_info({table});";
 
-            // SQLite doesn't support ADD COLUMN IF NOT EXISTS in older versions,
-            // so we check first then ALTER.
-            await ExecuteNonQueryAsync(conn, $"ALTER TABLE {table} ADD COLUMN {column} {ddlType};");
+            var exists = false;
+            using (var reader = await cmd.ExecuteReaderAsync())
+            {
+                while (await reader.ReadAsync())
+                {
+                    var name = reader.GetString(reader.GetOrdinal("name"));
+                    if (string.Equals(name, column, StringComparison.OrdinalIgnoreCase))
+                    {
+                        exists = true;
+                        break;
+                    }
+                }
+            }
+
+            if (exists) return;
+
+            using var alter = conn.CreateCommand();
+            alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition};";
+            await alter.ExecuteNonQueryAsync();
         }
 
         private static async Task<bool> ColumnExistsAsync(SqliteConnection conn, string table, string column)

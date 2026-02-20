@@ -1,7 +1,4 @@
-﻿using System;
-using System.Threading.Tasks;
-
-namespace eFinance.Services;
+﻿namespace eFinance.Services;
 
 public sealed class NavigationService : INavigationService
 {

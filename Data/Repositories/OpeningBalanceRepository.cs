@@ -1,8 +1,4 @@
-﻿using Microsoft.Data.Sqlite;
-using System;
-using System.Globalization;
-using System.Threading.Tasks;
-using eFinance.Data;
+﻿using System.Globalization;
 
 namespace eFinance.Data.Repositories;
 

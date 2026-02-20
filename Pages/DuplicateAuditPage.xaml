@@ -10,12 +10,11 @@
 
             <!-- Return -->
             <Button Text="Return"
-                    BackgroundColor="IndianRed"
-                    TextColor="White"
                     FontSize="16"
                     WidthRequest="220"
                     HorizontalOptions="Start"
                     CornerRadius="8"
+                    Style="{StaticResource ReturnButtonStyle}"
                     Command="{Binding ReturnCommand}" />
 
             <Label Text="Duplicate Audit"
@@ -24,12 +23,11 @@
 
             <!-- Run audit -->
             <Button Text="Run Duplicate Audit"
-                    BackgroundColor="DarkSeaGreen"
-                    TextColor="Black"
                     FontSize="18"
                     WidthRequest="220"
                     HorizontalOptions="Start"
                     CornerRadius="8"
+                    Style="{StaticResource SuccessButtonStyle}"
                     Command="{Binding RunAuditCommand}" />
 
             <!-- Summary -->
@@ -39,8 +37,7 @@
             <CollectionView ItemsSource="{Binding Results}">
                 <CollectionView.ItemTemplate>
                     <DataTemplate>
-                        <Frame BorderColor="LightGray"
-                               Padding="10"
+                        <Frame Padding="10"
                                Margin="0,6">
 
                             <VerticalStackLayout Spacing="4">
@@ -62,32 +59,29 @@
 
                                     <!-- IMPORTANT: command is on the page VM, item is the parameter -->
                                     <Button Text="Keep Top (Soft Delete Bottom)"
-                                            BackgroundColor="Firebrick"
-                                            TextColor="White"
                                             FontSize="16"
                                             WidthRequest="260"
                                             HorizontalOptions="Start"
                                             CornerRadius="8"
+                                            Style="{StaticResource DangerButtonStyle}"
                                             Command="{Binding BindingContext.KeepTopCommand, Source={x:Reference RootPage}}"
                                             CommandParameter="{Binding}" />
 
                                     <Button Text="Keep Bottom (Soft Delete Top)"
-                                            BackgroundColor="DarkOrange"
-                                            TextColor="White"
                                             FontSize="16"
                                             WidthRequest="260"
                                             HorizontalOptions="Start"
                                             CornerRadius="8"
+                                            Style="{StaticResource WarningButtonStyle}"
                                             Command="{Binding BindingContext.KeepBottomCommand, Source={x:Reference RootPage}}"
                                             CommandParameter="{Binding}" />
 
                                     <Button Text="Accept (Not a Duplicate)"
-                                            BackgroundColor="CornflowerBlue"
-                                            TextColor="White"
                                             FontSize="16"
                                             WidthRequest="220"
                                             HorizontalOptions="Start"
                                             CornerRadius="8"
+                                            Style="{StaticResource InfoButtonStyle}"
                                             Command="{Binding BindingContext.AcceptCommand, Source={x:Reference RootPage}}"
                                             CommandParameter="{Binding}" />
 

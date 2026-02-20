@@ -28,6 +28,80 @@
     <Color x:Key="Gray900">#212121</Color>
     <Color x:Key="Gray950">#141414</Color>
 
+    <!-- Semantic colors (use these in pages/styles instead of hard-coded named colors) -->
+    <Color x:Key="PageBackgroundLight">#FFFFFF</Color>
+    <Color x:Key="PageBackgroundDark">#121212</Color>
+    <Color x:Key="SurfaceLight">#FFFFFF</Color>
+    <Color x:Key="SurfaceDark">#1F1F1F</Color>
+    <Color x:Key="SurfaceAltLight">#F5F5F5</Color>
+    <Color x:Key="SurfaceAltDark">#181818</Color>
+    <Color x:Key="BorderLight">#DADADA</Color>
+    <Color x:Key="BorderDark">#3A3A3A</Color>
+
+    <Color x:Key="TextPrimaryLight">#111111</Color>
+    <Color x:Key="TextPrimaryDark">#FFFFFF</Color>
+    <Color x:Key="TextSecondaryLight">#444444</Color>
+    <Color x:Key="TextSecondaryDark">#D0D0D0</Color>
+
+    <!-- Buttons -->
+    <Color x:Key="ButtonNeutralLight">#E6E6E6</Color>
+    <Color x:Key="ButtonNeutralDark">#2A2A2A</Color>
+    <Color x:Key="ButtonNeutralTextLight">#111111</Color>
+    <Color x:Key="ButtonNeutralTextDark">#FFFFFF</Color>
+
+    <Color x:Key="ButtonSuccessLight">#2E7D32</Color>
+    <Color x:Key="ButtonSuccessDark">#3FA34D</Color>
+    <Color x:Key="ButtonInfoLight">#2B6CB0</Color>
+    <Color x:Key="ButtonInfoDark">#4C8DDA</Color>
+    <Color x:Key="ButtonDangerLight">#B3261E</Color>
+    <Color x:Key="ButtonDangerDark">#CF4A42</Color>
+    <Color x:Key="ButtonWarningLight">#B76E00</Color>
+    <Color x:Key="ButtonWarningDark">#D48B1E</Color>
+    <Color x:Key="ButtonOnColor">#FFFFFF</Color>
+
+    <!-- Money / amounts -->
+    <Color x:Key="MoneyNegativeLight">#B3261E</Color>
+    <Color x:Key="MoneyNegativeDark">#FF6B63</Color>
+    <Color x:Key="MoneyPositiveLight">#2E7D32</Color>
+    <Color x:Key="MoneyPositiveDark">#57D17A</Color>
+    <Color x:Key="MoneyZeroLight">#111111</Color>
+    <Color x:Key="MoneyZeroDark">#FFFFFF</Color>
+
+    <!-- Register row backgrounds -->
+    <Color x:Key="RowEvenLight">#FFFFFF</Color>
+    <Color x:Key="RowOddLight">#EFEFEF</Color>
+
+    <Color x:Key="RowEvenDark">#202020</Color>
+    <Color x:Key="RowOddDark">#2E2E2E</Color>
+
+    <!-- Selected row highlight -->
+    <Color x:Key="RowSelectedLight">#D6ECFF</Color>
+    <Color x:Key="RowSelectedDark">#2D3F5C</Color>
+
+    <!-- Search box background (match register theme) -->
+    <Color x:Key="SearchBgLight">#F6F6F6</Color>
+    <Color x:Key="SearchBgDark">#2E2E2E</Color>
+
+    <Color x:Key="SearchBorderLight">#CFCFCF</Color>
+    <Color x:Key="SearchBorderDark">#3A3A3A</Color>
+
+    <!-- Finance app button palette -->
+    <Color x:Key="BtnPrimaryLight">#0B5CAD</Color>
+    <!-- deep trust blue -->
+    <Color x:Key="BtnPrimaryDark">#2F7DD1</Color>
+
+    <Color x:Key="BtnNeutralLight">#E6E6E6</Color>
+    <!-- light gray -->
+    <Color x:Key="BtnNeutralDark">#2B2B2B</Color>
+
+    <Color x:Key="BtnDangerLight">#C62828</Color>
+    <!-- deep red -->
+    <Color x:Key="BtnDangerDark">#E25555</Color>
+
+    <Color x:Key="BtnTextOnColor">#FFFFFF</Color>
+    <Color x:Key="BtnTextOnNeutralLight">#1A1A1A</Color>
+    <Color x:Key="BtnTextOnNeutralDark">#FFFFFF</Color>
+
     <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource Primary}"/>
     <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource Secondary}"/>
     <SolidColorBrush x:Key="TertiaryBrush" Color="{StaticResource Tertiary}"/>
@@ -42,4 +116,11 @@
     <SolidColorBrush x:Key="Gray600Brush" Color="{StaticResource Gray600}"/>
     <SolidColorBrush x:Key="Gray900Brush" Color="{StaticResource Gray900}"/>
     <SolidColorBrush x:Key="Gray950Brush" Color="{StaticResource Gray950}"/>
+
+    <SolidColorBrush x:Key="PageBackgroundBrush" Color="{AppThemeBinding Light={StaticResource PageBackgroundLight}, Dark={StaticResource PageBackgroundDark}}" />
+    <SolidColorBrush x:Key="SurfaceBrush" Color="{AppThemeBinding Light={StaticResource SurfaceLight}, Dark={StaticResource SurfaceDark}}" />
+    <SolidColorBrush x:Key="SurfaceAltBrush" Color="{AppThemeBinding Light={StaticResource SurfaceAltLight}, Dark={StaticResource SurfaceAltDark}}" />
+    <SolidColorBrush x:Key="BorderBrush" Color="{AppThemeBinding Light={StaticResource BorderLight}, Dark={StaticResource BorderDark}}" />
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="{AppThemeBinding Light={StaticResource TextPrimaryLight}, Dark={StaticResource TextPrimaryDark}}" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}" />
 </ResourceDictionary>

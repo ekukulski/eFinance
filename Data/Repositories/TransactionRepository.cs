@@ -1,10 +1,6 @@
-﻿using Microsoft.Data.Sqlite;
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
-using System.Threading.Tasks;
+﻿using System.Globalization;
 using eFinance.Data.Models;
+using Microsoft.Data.Sqlite;
 
 namespace eFinance.Data.Repositories
 {
@@ -709,6 +705,27 @@ LIMIT 1;
 
                 CreatedUtc = DateTime.Parse(r.GetString(12), null, DateTimeStyles.RoundtripKind)
             };
+        }
+        // ------------------------------------------------------------
+        // SOFT DELETE (Deactivate Account)
+        // ------------------------------------------------------------
+        public async Task<bool> DeactivateByIdAsync(long id)
+        {
+            if (id <= 0) throw new ArgumentOutOfRangeException(nameof(id));
+
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            cmd.CommandText = @"
+UPDATE Accounts
+SET IsActive = 0
+WHERE Id = $id;
+SELECT changes();
+";
+            cmd.Parameters.AddWithValue("$id", id);
+
+            var changed = Convert.ToInt64(await cmd.ExecuteScalarAsync() ?? 0L, CultureInfo.InvariantCulture);
+            return changed > 0;
         }
     }
 }

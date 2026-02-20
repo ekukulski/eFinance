@@ -63,8 +63,7 @@
 
             <!-- Optional: leave in UI but disable until implemented -->
             <Button Text="Create Rule"
-                    BackgroundColor="DarkSeaGreen"
-                    TextColor="Black"
+                    Style="{StaticResource NeutralButtonStyle}"
                     FontAttributes="Bold"
                     IsEnabled="False"
                     Opacity="0.55"
@@ -76,22 +75,19 @@
                                    HorizontalOptions="FillAndExpand">
 
                 <Button Text="Save"
-                        BackgroundColor="LightGreen"
-                        TextColor="Black"
+                        Style="{StaticResource SuccessButtonStyle}"
                         FontAttributes="Bold"
                         Command="{Binding SaveCommand}"
                         HorizontalOptions="StartAndExpand" />
 
                 <Button Text="Cancel"
-                        BackgroundColor="CornflowerBlue"
-                        TextColor="Black"
+                        Style="{StaticResource NeutralButtonStyle}"
                         FontAttributes="Bold"
                         Command="{Binding CancelCommand}"
                         HorizontalOptions="CenterAndExpand" />
 
                 <Button Text="Return"
-                        BackgroundColor="IndianRed"
-                        TextColor="Black"
+                        Style="{StaticResource ReturnButtonStyle}"
                         FontAttributes="Bold"
                         Command="{Binding CancelCommand}"
                         HorizontalOptions="End" />
@@ -99,7 +95,7 @@
 
             <!-- Optional info line -->
             <Label Text=""
-                   TextColor="Gray"
+                   TextColor="{AppThemeBinding Light={StaticResource TextSecondaryLight}, Dark={StaticResource TextSecondaryDark}}"
                    FontSize="12" />
 
         </VerticalStackLayout>

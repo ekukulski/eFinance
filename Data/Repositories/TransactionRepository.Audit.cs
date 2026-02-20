@@ -1,10 +1,4 @@
-﻿using Microsoft.Data.Sqlite;
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Threading.Tasks;
-using eFinance.Data.Models;
-using TransactionModel = eFinance.Data.Models.Transaction;
+﻿using eFinance.Data.Models;
 
 
 namespace eFinance.Data.Repositories

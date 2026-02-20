@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using eFinance.ViewModels;
-using Microsoft.Maui.Controls;
 
 namespace eFinance.Pages;
 

@@ -1,6 +1,4 @@
-﻿using System.Threading.Tasks;
-
-namespace eFinance.Services;
+﻿namespace eFinance.Services;
 
 public interface IDialogService
 {

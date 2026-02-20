@@ -1,13 +1,10 @@
-﻿using System;
-using System.IO;
-using eFinance.Data;
+﻿using eFinance.Data;
 using eFinance.Data.Repositories;
 using eFinance.Importing;
 using eFinance.Pages;
 using eFinance.Services;
 using eFinance.ViewModels;
 using LiveChartsCore.SkiaSharpView.Maui;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.LifecycleEvents;
 using SkiaSharp.Views.Maui.Controls.Hosting;
