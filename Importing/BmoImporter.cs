@@ -1,8 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using eFinance.Data.Repositories;
 using eFinance.Services;
@@ -53,9 +54,6 @@ namespace eFinance.Importing
             int ignored = 0;
             int failed = 0;
 
-            // For legitimate duplicates: base key + occurrence number (001, 002, ...)
-            var occurrenceByBaseKey = new Dictionary<string, int>(StringComparer.Ordinal);
-
             foreach (var row in CsvReader.Read(filePath))
             {
                 try
@@ -77,33 +75,10 @@ namespace eFinance.Importing
                     var csvAmount = ParseDecimal(amountText);
                     var amount = AmountNormalizer.Normalize(csvAmount, SignPolicy);
 
-                    // ✅ Build a collision-resistant base key.
-                    // We include FI ref if present, but also include date/amount/desc so
-                    // rows that share FI ref don't collide.
-                    var normDesc = NormalizeKeyText(desc);
-                    var normAmount = amount.ToString("0.00", CultureInfo.InvariantCulture);
-                    var normFiRef = NormalizeKeyText(fiRef);
-                    var normTxnRef = NormalizeKeyText(txnRef);
-
-                    string baseKey;
-                    if (!string.IsNullOrWhiteSpace(normFiRef))
-                    {
-                        baseKey = $"BMO|FI|{normFiRef}|{date:yyyyMMdd}|{normAmount}|{normDesc}";
-                    }
-                    else if (!string.IsNullOrWhiteSpace(normTxnRef))
-                    {
-                        baseKey = $"BMO|TRN|{normTxnRef}|{date:yyyyMMdd}|{normAmount}|{normDesc}";
-                    }
-                    else
-                    {
-                        baseKey = $"BMO|{date:yyyyMMdd}|{normAmount}|{normDesc}";
-                    }
-
-                    occurrenceByBaseKey.TryGetValue(baseKey, out var n);
-                    n++;
-                    occurrenceByBaseKey[baseKey] = n;
-
-                    var fitId = $"{baseKey}|{n:D3}";
+                    // Stable FitId: deterministic base key (no per-run counters),
+                    // hashed to keep FitId compact and consistent.
+                    var baseKey = BuildBaseKey(date, amount, desc, fiRef, txnRef);
+                    var fitId = "BMO|" + Sha256Hex(baseKey);
 
                     var transaction = new eFinance.Data.Models.Transaction
                     {
@@ -114,7 +89,10 @@ namespace eFinance.Importing
                         Category = null, // legacy
                         FitId = fitId,
                         Source = SourceName,
-                        CreatedUtc = DateTime.UtcNow
+                        CreatedUtc = DateTime.UtcNow,
+
+                        // Optional: keep refs visible for debugging/auditing
+                        Memo = BuildMemo(fiRef, txnRef)
                     };
 
                     // Auto-categorize before insert
@@ -142,6 +120,47 @@ namespace eFinance.Importing
             return new ImportResult(inserted, ignored, failed);
         }
 
+        private static string BuildBaseKey(DateOnly date, decimal amount, string desc, string? fiRef, string? txnRef)
+        {
+            var normDesc = NormalizeKeyText(desc);
+            var normAmount = amount.ToString("0.00", CultureInfo.InvariantCulture);
+            var normFiRef = NormalizeKeyText(fiRef);
+            var normTxnRef = NormalizeKeyText(txnRef);
+
+            // Prefer FI ref (usually most stable), then txn ref, else fall back to date/amount/desc.
+            if (!string.IsNullOrWhiteSpace(normFiRef))
+                return $"FI|{normFiRef}|{date:yyyyMMdd}|{normAmount}|{normDesc}";
+
+            if (!string.IsNullOrWhiteSpace(normTxnRef))
+                return $"TRN|{normTxnRef}|{date:yyyyMMdd}|{normAmount}|{normDesc}";
+
+            return $"{date:yyyyMMdd}|{normAmount}|{normDesc}";
+        }
+
+        private static string? BuildMemo(string? fiRef, string? txnRef)
+        {
+            var a = string.IsNullOrWhiteSpace(fiRef) ? null : fiRef.Trim();
+            var b = string.IsNullOrWhiteSpace(txnRef) ? null : txnRef.Trim();
+
+            if (a is null && b is null) return null;
+            if (a is null) return $"TRN:{b}";
+            if (b is null) return $"FI:{a}";
+            return $"FI:{a} | TRN:{b}";
+        }
+
+        private static string Sha256Hex(string text)
+        {
+            using var sha = SHA256.Create();
+            var bytes = Encoding.UTF8.GetBytes(text);
+            var hash = sha.ComputeHash(bytes);
+
+            var sb = new StringBuilder(hash.Length * 2);
+            foreach (var b in hash)
+                sb.Append(b.ToString("x2"));
+
+            return sb.ToString();
+        }
+
         private static string? FirstNonNull(CsvRow row, params string[] names)
         {
             foreach (var n in names)
@@ -152,15 +171,14 @@ namespace eFinance.Importing
             }
             return null;
         }
+
         private static string NormalizeKeyText(string? text)
         {
             if (string.IsNullOrWhiteSpace(text))
                 return "";
 
             var s = text.Trim().ToLowerInvariant();
-
             s = System.Text.RegularExpressions.Regex.Replace(s, @"\s+", " ");
-
             return s;
         }
 

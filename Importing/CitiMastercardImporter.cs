@@ -1,8 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using eFinance.Data.Repositories;
 using eFinance.Services;
@@ -19,7 +20,10 @@ namespace eFinance.Importing
         public string HeaderHint => "Status, Date, Description, Debit, Credit, Member Name";
         public AmountSignPolicy? AmountPolicy => AmountSignPolicy.DebitCreditColumns;
 
-        public CitiMastercardImporter(AccountRepository accounts, TransactionRepository transactions, CategorizationService categorizer)
+        public CitiMastercardImporter(
+            AccountRepository accounts,
+            TransactionRepository transactions,
+            CategorizationService categorizer)
         {
             _accounts = accounts ?? throw new ArgumentNullException(nameof(accounts));
             _transactions = transactions ?? throw new ArgumentNullException(nameof(transactions));
@@ -56,8 +60,6 @@ namespace eFinance.Importing
             int ignored = 0;
             int failed = 0;
 
-            var occurrenceByBaseKey = new Dictionary<string, int>(StringComparer.Ordinal);
-
             foreach (var row in CsvReader.Read(filePath))
             {
                 try
@@ -67,6 +69,11 @@ namespace eFinance.Importing
                     var debitText = FirstNonNull(row, "Debit", "DEBIT");
                     var creditText = FirstNonNull(row, "Credit", "CREDIT");
                     var status = FirstNonNull(row, "Status", "STATUS");
+                    var memberName = FirstNonNull(row, "Member Name", "MEMBER NAME", "Member", "Cardmember");
+
+                    // Optional extra fields some Citi exports include:
+                    var refNum = FirstNonNull(row, "Reference Number", "Reference", "Ref", "Transaction ID", "TransactionId", "Id");
+                    var category = FirstNonNull(row, "Category", "CATEGORY");
 
                     if (dateText is null || desc is null)
                     {
@@ -79,14 +86,13 @@ namespace eFinance.Importing
                     decimal? debit = ParseNullableDecimal(debitText);
                     decimal? credit = ParseNullableDecimal(creditText);
 
+                    // Citi uses separate Debit/Credit columns; normalize into signed amount for eFinance.
                     var amount = AmountNormalizer.NormalizeDebitCredit(debit, credit);
 
-                    var baseKey = $"{date:yyyyMMdd}|{amount.ToString("0.00", CultureInfo.InvariantCulture)}|{NormalizeKeyText(desc)}";
-                    occurrenceByBaseKey.TryGetValue(baseKey, out var n);
-                    n++;
-                    occurrenceByBaseKey[baseKey] = n;
-
-                    var fitId = $"CITI|{baseKey}|{n:D3}";
+                    // Stable FitId (NO per-run occurrence counters).
+                    // Same transaction data => same FitId across re-imports (YTD, etc).
+                    var baseKey = BuildBaseKey(date, amount, desc, status, memberName, refNum, category);
+                    var fitId = "CITI|" + Sha256Hex(baseKey);
 
                     var transaction = new eFinance.Data.Models.Transaction
                     {
@@ -94,8 +100,8 @@ namespace eFinance.Importing
                         PostedDate = date,
                         Description = desc,
                         Amount = amount,
-                        Memo = string.IsNullOrWhiteSpace(status) ? null : status.Trim(),
-                        Category = null,
+                        Memo = BuildMemo(status, memberName),
+                        Category = null, // legacy; keep null
                         FitId = fitId,
                         Source = SourceName,
                         CreatedUtc = DateTime.UtcNow
@@ -124,6 +130,50 @@ namespace eFinance.Importing
             return new ImportResult(inserted, ignored, failed);
         }
 
+        private static string? BuildMemo(string? status, string? memberName)
+        {
+            status = string.IsNullOrWhiteSpace(status) ? null : status.Trim();
+            memberName = string.IsNullOrWhiteSpace(memberName) ? null : memberName.Trim();
+
+            if (status is null && memberName is null) return null;
+            if (status is null) return memberName;
+            if (memberName is null) return status;
+
+            return $"{status} | {memberName}";
+        }
+
+        private static string BuildBaseKey(
+            DateOnly date,
+            decimal amount,
+            string description,
+            string? status,
+            string? memberName,
+            string? refNum,
+            string? category)
+        {
+            var normAmount = amount.ToString("0.00", CultureInfo.InvariantCulture);
+            var normDesc = NormalizeKeyText(description);
+            var normStatus = NormalizeKeyText(status);
+            var normMember = NormalizeKeyText(memberName);
+            var normRef = NormalizeKeyText(refNum);
+            var normCat = NormalizeKeyText(category);
+
+            return $"{date:yyyyMMdd}|{normAmount}|{normDesc}|{normStatus}|{normMember}|{normRef}|{normCat}";
+        }
+
+        private static string Sha256Hex(string text)
+        {
+            using var sha = SHA256.Create();
+            var bytes = Encoding.UTF8.GetBytes(text);
+            var hash = sha.ComputeHash(bytes);
+
+            var sb = new StringBuilder(hash.Length * 2);
+            foreach (var b in hash)
+                sb.Append(b.ToString("x2"));
+
+            return sb.ToString();
+        }
+
         private static string? FirstNonNull(CsvRow row, params string[] names)
         {
             foreach (var n in names)
@@ -141,9 +191,7 @@ namespace eFinance.Importing
                 return "";
 
             var s = text.Trim().ToLowerInvariant();
-
             s = System.Text.RegularExpressions.Regex.Replace(s, @"\s+", " ");
-
             return s;
         }
 

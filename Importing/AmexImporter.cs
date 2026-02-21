@@ -1,9 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using eFinance.Data.Repositories;
 using eFinance.Services;
@@ -12,7 +12,7 @@ namespace eFinance.Importing
 {
     public sealed class AmexImporter : IImporter
     {
-        private readonly AccountRepository _accounts;
+        private readonly AccountRepository _accounts; // kept for DI compatibility / future use
         private readonly TransactionRepository _transactions;
         private readonly CategorizationService _categorizer;
 
@@ -28,8 +28,11 @@ namespace eFinance.Importing
             _transactions = transactions ?? throw new ArgumentNullException(nameof(transactions));
             _categorizer = categorizer ?? throw new ArgumentNullException(nameof(categorizer));
         }
-        public AmountSignPolicy? AmountPolicy => AmountSignPolicy.Invert;
+
+        public AmountSignPolicy? AmountPolicy => SignPolicy;
+
         public string SourceName => "AMEX";
+
         public string HeaderHint => "Date, Description, Card Member, Account #, Amount";
 
         public bool CanImport(string filePath)
@@ -46,8 +49,6 @@ namespace eFinance.Importing
                 fileName.Equals("activity.csv", StringComparison.OrdinalIgnoreCase);
 
             // Strong check: detect AMEX by header columns.
-            // Expected header example:
-            // Date,Description,Card Member,Account #,Amount
             var header = File.ReadLines(filePath).FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(header))
             {
@@ -77,10 +78,6 @@ namespace eFinance.Importing
             int ignored = 0;
             int failed = 0;
 
-        // Prevent legit duplicates from colliding on FitId:
-        // base key + occurrence number (001, 002, ...)
-        var occurrenceByBaseKey = new Dictionary<string, int>(StringComparer.Ordinal);
-
             foreach (var row in CsvReader.Read(filePath))
             {
                 try
@@ -97,9 +94,13 @@ namespace eFinance.Importing
                     var accountNo = FirstNonNull(row,
                         "Account #", "Account", "Account Number");
 
-                    // Include Card Member if present (reduces collisions further).
+                    // Include Card Member if present (reduces collisions).
                     var cardMember = FirstNonNull(row,
                         "Card Member", "CardMember", "CARD MEMBER");
+
+                    // Optional extra fields if they exist in some AMEX exports
+                    var memo = FirstNonNull(row, "Memo", "Notes", "Extended Details", "Additional Information");
+                    var txnId = FirstNonNull(row, "Transaction ID", "TransactionId", "Reference Number", "Ref", "Id");
 
                     if (dateText is null || desc is null || amountText is null)
                     {
@@ -109,28 +110,18 @@ namespace eFinance.Importing
 
                     var date = ParseDate(dateText);
 
-                    // Parse CSV amount then normalize to eFinance convention using policy.
-                    // AMEX: charges positive, credits/payments negative
-                    // eFinance: charges negative, credits/payments positive
-                    // => Invert
+                    // Parse CSV amount then normalize to eFinance convention using policy (Invert).
                     var csvAmount = ParseDecimal(amountText);
                     var amount = AmountNormalizer.Normalize(csvAmount, SignPolicy);
 
-                    // Build stable, collision-resistant FitId.
-                    var normDesc = NormalizeKeyText(desc);
-                    var normAcct = NormalizeKeyText(accountNo);
-                    var normMember = NormalizeKeyText(cardMember);
+                    // Build a STABLE FitId (deterministic across re-imports).
+                    // IMPORTANT: include accountId to ensure uniqueness across accounts.
+                    var baseKey = BuildBaseKey(accountId, date, amount, desc, accountNo, cardMember, memo, txnId);
+                    var fitId = "AMEX|" + Sha256Hex(baseKey);
 
-                    // Normalize amount text so 12.3 and 12.30 are identical in the key.
-                    var normAmountText = amount.ToString("0.00", CultureInfo.InvariantCulture);
-
-                    var baseKey = $"{date:yyyyMMdd}|{normAcct}|{normMember}|{normAmountText}|{normDesc}";
-
-                    occurrenceByBaseKey.TryGetValue(baseKey, out var n);
-                    n++;
-                    occurrenceByBaseKey[baseKey] = n;
-
-                    var fitId = $"{baseKey}|{n:D3}";
+                    // Fail fast: if FitId is ever blank, uniqueness protections won't work.
+                    if (string.IsNullOrWhiteSpace(fitId))
+                        throw new InvalidOperationException("FitId must not be blank.");
 
                     var transaction = new eFinance.Data.Models.Transaction
                     {
@@ -141,7 +132,8 @@ namespace eFinance.Importing
                         Category = null, // legacy; keep null
                         FitId = fitId,
                         Source = SourceName,
-                        CreatedUtc = DateTime.UtcNow
+                        CreatedUtc = DateTime.UtcNow,
+                        Memo = memo
                     };
 
                     // Auto-categorize before insert
@@ -171,6 +163,43 @@ namespace eFinance.Importing
             return new ImportResult(inserted, ignored, failed);
         }
 
+        private static string BuildBaseKey(
+            long accountId,
+            DateOnly date,
+            decimal amount,
+            string description,
+            string? accountNo,
+            string? cardMember,
+            string? memo,
+            string? txnId)
+        {
+            var normDesc = NormalizeKeyText(description);
+            var normAcct = NormalizeKeyText(accountNo);
+            var normMember = NormalizeKeyText(cardMember);
+            var normMemo = NormalizeKeyText(memo);
+            var normTxnId = NormalizeKeyText(txnId);
+
+            var normAmountText = amount.ToString("0.00", CultureInfo.InvariantCulture);
+
+            // Keep the key purely data-based and deterministic.
+            // Include accountId to avoid collisions across accounts.
+            return $"{accountId}|{date:yyyyMMdd}|{normAmountText}|{normDesc}|{normAcct}|{normMember}|{normMemo}|{normTxnId}";
+        }
+
+        private static string Sha256Hex(string text)
+        {
+            using var sha = SHA256.Create();
+            var bytes = Encoding.UTF8.GetBytes(text);
+            var hash = sha.ComputeHash(bytes);
+
+            // Full hex avoids collisions best.
+            var sb = new StringBuilder(hash.Length * 2);
+            foreach (var b in hash)
+                sb.Append(b.ToString("x2"));
+
+            return sb.ToString();
+        }
+
         private static string? FirstNonNull(CsvRow row, params string[] names)
         {
             foreach (var n in names)
@@ -191,9 +220,7 @@ namespace eFinance.Importing
                 return "";
 
             var s = text.Trim().ToLowerInvariant();
-
             s = System.Text.RegularExpressions.Regex.Replace(s, @"\s+", " ");
-
             return s;
         }
 
