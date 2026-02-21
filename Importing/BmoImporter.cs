@@ -11,7 +11,6 @@ namespace eFinance.Importing
 {
     public sealed class BmoImporter : IImporter
     {
-        private readonly AccountRepository _accounts;
         private readonly TransactionRepository _transactions;
         private readonly CategorizationService _categorizer;
 
@@ -19,11 +18,9 @@ namespace eFinance.Importing
         public AmountSignPolicy? AmountPolicy => SignPolicy;
 
         public string SourceName => "BMO";
-        public string HeaderHint => "POSTED DATE, DESCRIPTION, AMOUNT, FI TRANSACTION REFERENCE, ...";
 
-        public BmoImporter(AccountRepository accounts, TransactionRepository transactions, CategorizationService categorizer)
+        public BmoImporter(TransactionRepository transactions, CategorizationService categorizer)
         {
-            _accounts = accounts ?? throw new ArgumentNullException(nameof(accounts));
             _transactions = transactions ?? throw new ArgumentNullException(nameof(transactions));
             _categorizer = categorizer ?? throw new ArgumentNullException(nameof(categorizer));
         }
@@ -34,8 +31,6 @@ namespace eFinance.Importing
             if (!filePath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)) return false;
             if (!File.Exists(filePath)) return false;
 
-            // Strong check: detect by header columns.
-            // POSTED DATE,DESCRIPTION,AMOUNT,CURRENCY,TRANSACTION REFERENCE NUMBER,FI TRANSACTION REFERENCE,TYPE,CREDIT/DEBIT,ORIGINAL AMOUNT
             var header = File.ReadLines(filePath).FirstOrDefault();
             if (string.IsNullOrWhiteSpace(header)) return false;
 
@@ -58,6 +53,9 @@ namespace eFinance.Importing
             int ignored = 0;
             int failed = 0;
 
+            // For legitimate duplicates: base key + occurrence number (001, 002, ...)
+            var occurrenceByBaseKey = new Dictionary<string, int>(StringComparer.Ordinal);
+
             foreach (var row in CsvReader.Read(filePath))
             {
                 try
@@ -65,6 +63,7 @@ namespace eFinance.Importing
                     var dateText = FirstNonNull(row, "POSTED DATE", "Posted Date", "Date");
                     var desc = FirstNonNull(row, "DESCRIPTION", "Description");
                     var amountText = FirstNonNull(row, "AMOUNT", "Amount");
+
                     var fiRef = FirstNonNull(row, "FI TRANSACTION REFERENCE", "FI Transaction Reference");
                     var txnRef = FirstNonNull(row, "TRANSACTION REFERENCE NUMBER", "Transaction Reference Number");
 
@@ -78,9 +77,33 @@ namespace eFinance.Importing
                     var csvAmount = ParseDecimal(amountText);
                     var amount = AmountNormalizer.Normalize(csvAmount, SignPolicy);
 
-                    // Prefer FI TRANSACTION REFERENCE (best unique key)
-                    // Fallback to a composite if missing.
-                    var fitId = BuildFitId(date, desc, amount, fiRef, txnRef);
+                    // ✅ Build a collision-resistant base key.
+                    // We include FI ref if present, but also include date/amount/desc so
+                    // rows that share FI ref don't collide.
+                    var normDesc = NormalizeKeyText(desc);
+                    var normAmount = amount.ToString("0.00", CultureInfo.InvariantCulture);
+                    var normFiRef = NormalizeKeyText(fiRef);
+                    var normTxnRef = NormalizeKeyText(txnRef);
+
+                    string baseKey;
+                    if (!string.IsNullOrWhiteSpace(normFiRef))
+                    {
+                        baseKey = $"BMO|FI|{normFiRef}|{date:yyyyMMdd}|{normAmount}|{normDesc}";
+                    }
+                    else if (!string.IsNullOrWhiteSpace(normTxnRef))
+                    {
+                        baseKey = $"BMO|TRN|{normTxnRef}|{date:yyyyMMdd}|{normAmount}|{normDesc}";
+                    }
+                    else
+                    {
+                        baseKey = $"BMO|{date:yyyyMMdd}|{normAmount}|{normDesc}";
+                    }
+
+                    occurrenceByBaseKey.TryGetValue(baseKey, out var n);
+                    n++;
+                    occurrenceByBaseKey[baseKey] = n;
+
+                    var fitId = $"{baseKey}|{n:D3}";
 
                     var transaction = new eFinance.Data.Models.Transaction
                     {
@@ -111,22 +134,12 @@ namespace eFinance.Importing
                 catch (Exception ex)
                 {
                     failed++;
-                    System.Diagnostics.Debug.WriteLine("BMO import row failed: " + ex);
+                    System.Diagnostics.Debug.WriteLine($"BMO import row failed: {ex}");
                 }
             }
 
+            System.Diagnostics.Debug.WriteLine($"BMO import finished. Inserted={inserted}, Ignored={ignored}, Failed={failed}");
             return new ImportResult(inserted, ignored, failed);
-        }
-
-        private static string BuildFitId(DateOnly date, string desc, decimal amount, string? fiRef, string? txnRef)
-        {
-            if (!string.IsNullOrWhiteSpace(fiRef))
-                return $"BMO|FI|{fiRef.Trim()}";
-
-            if (!string.IsNullOrWhiteSpace(txnRef))
-                return $"BMO|TRN|{txnRef.Trim()}|{date:yyyyMMdd}|{amount.ToString("0.00", CultureInfo.InvariantCulture)}|{NormalizeKeyText(desc)}";
-
-            return $"BMO|{date:yyyyMMdd}|{amount.ToString("0.00", CultureInfo.InvariantCulture)}|{NormalizeKeyText(desc)}";
         }
 
         private static string? FirstNonNull(CsvRow row, params string[] names)
@@ -139,15 +152,14 @@ namespace eFinance.Importing
             }
             return null;
         }
-
         private static string NormalizeKeyText(string? text)
         {
             if (string.IsNullOrWhiteSpace(text))
-                return string.Empty;
+                return "";
 
-            var s = text.Trim();
-            while (s.Contains("  ", StringComparison.Ordinal))
-                s = s.Replace("  ", " ", StringComparison.Ordinal);
+            var s = text.Trim().ToLowerInvariant();
+
+            s = System.Text.RegularExpressions.Regex.Replace(s, @"\s+", " ");
 
             return s;
         }

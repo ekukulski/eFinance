@@ -58,10 +58,16 @@ public partial class App : Application
 
                 await InitializeLocalDatabaseAsync();
 
-                EnsureImportDropFolderExists();
+                var importDrop = EnsureImportDropFolderExists();
+                System.Diagnostics.Debug.WriteLine("ImportDrop folder: " + importDrop);
 
                 // Start watching the import drop folder AFTER DB is ready.
                 _importWatcher.Start();
+                System.Diagnostics.Debug.WriteLine("ImportWatcher started.");
+
+                // OPTIONAL: If CSVs already exist, touch timestamps so Changed event fires.
+                // This helps in cases where the file was copied in before the watcher started.
+                TryNudgeExistingCsvFiles(importDrop);
 
                 // Optional startup import (guarded & best-effort).
                 await TryAutoImportOnStartupAsync();
@@ -83,20 +89,56 @@ public partial class App : Application
         _ = TryAutoExportOnExitAsync();
     }
 
-    private void EnsureImportDropFolderExists()
+    private static string EnsureImportDropFolderExists()
     {
+        var folder = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "eFinance",
+            "ImportDrop");
+
         try
         {
-            var folder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "eFinance",
-                "ImportDrop");
-
             Directory.CreateDirectory(folder);
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine("EnsureImportDropFolderExists failed: " + ex);
+        }
+
+        return folder;
+    }
+
+    private static void TryNudgeExistingCsvFiles(string importDropFolder)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(importDropFolder) || !Directory.Exists(importDropFolder))
+                return;
+
+            // Only look at top-level CSVs (ignore Archive)
+            var csvs = Directory.GetFiles(importDropFolder, "*.csv", SearchOption.TopDirectoryOnly);
+
+            if (csvs.Length == 0)
+                return;
+
+            System.Diagnostics.Debug.WriteLine($"Found {csvs.Length} existing CSV(s) in ImportDrop. Nudging timestamps...");
+
+            foreach (var path in csvs)
+            {
+                try
+                {
+                    // Touch file timestamp to trigger FileSystemWatcher.Changed
+                    File.SetLastWriteTimeUtc(path, DateTime.UtcNow);
+                }
+                catch (Exception exFile)
+                {
+                    System.Diagnostics.Debug.WriteLine("Nudge failed for " + path + ": " + exFile.Message);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine("TryNudgeExistingCsvFiles error: " + ex);
         }
     }
 
@@ -134,11 +176,12 @@ public partial class App : Application
 
             using var conn = _db.OpenConnection();
 
-            // If table is missing, this will throw; caught below (best-effort)
             using (var check = conn.CreateCommand())
             {
                 check.CommandText = "SELECT COUNT(1) FROM OpeningBalances;";
-                var count = (long)(await check.ExecuteScalarAsync() ?? 0L);
+                var countObj = await check.ExecuteScalarAsync();
+                var count = Convert.ToInt64(countObj ?? 0);
+
                 if (count > 0)
                 {
                     Preferences.Set(PrefOpeningBalancesSeeded, true);
@@ -194,16 +237,13 @@ public partial class App : Application
                 using var cmd = conn.CreateCommand();
                 cmd.Transaction = tx;
 
+                // Insert rows (simple + safe for first seed when table is empty)
                 cmd.CommandText = @"
 INSERT INTO OpeningBalances (AccountName, BalanceDate, Balance, CreatedUtc)
-VALUES ($name, $date, $bal, $createdUtc)
-ON CONFLICT(AccountName) DO UPDATE SET
-    BalanceDate = excluded.BalanceDate,
-    Balance = excluded.Balance,
-    CreatedUtc = excluded.CreatedUtc;
+VALUES ($name, $date, $bal, $createdUtc);
 ";
                 cmd.Parameters.AddWithValue("$name", accountName);
-                cmd.Parameters.AddWithValue("$date", dt.ToString("yyyy-MM-dd"));
+                cmd.Parameters.AddWithValue("$date", dt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
                 cmd.Parameters.AddWithValue("$bal", (double)bal);
                 cmd.Parameters.AddWithValue("$createdUtc", nowUtc);
 
@@ -217,7 +257,6 @@ ON CONFLICT(AccountName) DO UPDATE SET
         }
         catch (SqliteException sx)
         {
-            // Most common reason: OpeningBalances table doesn't exist yet
             System.Diagnostics.Debug.WriteLine("SeedOpeningBalancesFromCsvIfNeededAsync SQLite error: " + sx.Message);
         }
         catch (Exception ex)

@@ -1,10 +1,16 @@
-﻿using System.Collections.ObjectModel;
+﻿using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using eFinance.Data.Repositories;
 using eFinance.Pages;
+using Microsoft.Maui.ApplicationModel.DataTransfer;
+using Microsoft.Maui.Controls;
 using TransactionModel = eFinance.Data.Models.Transaction;
 
 namespace eFinance.ViewModels;
@@ -29,7 +35,7 @@ public sealed partial class RegisterViewModel : ObservableObject
         _accounts = accounts ?? throw new ArgumentNullException(nameof(accounts));
         _openingBalances = openingBalances ?? throw new ArgumentNullException(nameof(openingBalances));
     }
-    
+
     [ObservableProperty] private long accountId;
     [ObservableProperty] private string title = "Register";
     [ObservableProperty] private decimal currentBalance;
@@ -50,9 +56,21 @@ public sealed partial class RegisterViewModel : ObservableObject
     // Auto-called by CommunityToolkit when SelectedRow changes
     partial void OnSelectedRowChanged(RegisterRow? value)
     {
+        // Clear old highlight
         if (_lastSelected != null)
             _lastSelected.IsSelected = false;
 
+        // Block selecting synthetic opening row
+        if (value is not null && value.Transaction.Id <= 0)
+        {
+            // Keep UI sane: do not leave it selected
+            value.IsSelected = false;
+            SelectedRow = null;
+            _lastSelected = null;
+            return;
+        }
+
+        // Highlight new selection
         if (value != null)
             value.IsSelected = true;
 
@@ -71,15 +89,15 @@ public sealed partial class RegisterViewModel : ObservableObject
         await RefreshCoreAsync();
     }
 
+    // ------------------------------------------------------------
+    // Commands
+    // ------------------------------------------------------------
     [RelayCommand]
     private Task RefreshAsync() => RefreshCoreAsync();
 
     [RelayCommand]
     private Task AddTransactionAsync()
-    {
-        // Add mode: no transactionId
-        return Shell.Current.GoToAsync($"{nameof(TransactionEditPage)}?accountId={AccountId}");
-    }
+        => Shell.Current.GoToAsync($"{nameof(TransactionEditPage)}?accountId={AccountId}");
 
     [RelayCommand]
     private async Task EditTransactionAsync()
@@ -99,13 +117,8 @@ public sealed partial class RegisterViewModel : ObservableObject
             return;
         }
 
-        var id = row.Transaction.Id;
-
-        System.Diagnostics.Debug.WriteLine(
-            $"EditTransaction: navigating to TransactionEditPage with accountId={AccountId}, transactionId={id}");
-
         await Shell.Current.GoToAsync(
-            $"{nameof(TransactionEditPage)}?accountId={AccountId}&transactionId={id}");
+            $"{nameof(TransactionEditPage)}?accountId={AccountId}&transactionId={row.Transaction.Id}");
     }
 
     [RelayCommand]
@@ -156,12 +169,15 @@ public sealed partial class RegisterViewModel : ObservableObject
         return Shell.Current.GoToAsync($"{nameof(DeletedTransactionsPage)}?accountId={AccountId}");
     }
 
+    // ------------------------------------------------------------
+    // Core refresh / register building
+    // ------------------------------------------------------------
     private async Task RefreshCoreAsync()
     {
         if (AccountId <= 0)
             return;
 
-        // Make sure we have account name/title
+        // Ensure name/title
         if (string.IsNullOrWhiteSpace(_accountName))
         {
             var acct = await _accounts.GetByIdAsync(AccountId);
@@ -169,31 +185,36 @@ public sealed partial class RegisterViewModel : ObservableObject
             Title = $"{_accountName} Register";
         }
 
-        var (obDate, opening) = await _openingBalances.GetOpeningBalanceInfoAsync(_accountName);
+        // Opening balance: AccountId-first, name fallback
+        var (obDate, opening) = await _openingBalances.GetOpeningBalanceInfoAsync(AccountId, _accountName);
 
         var txns = await _transactions.GetTransactionsAsync(AccountId);
 
+        // Build in ascending date order to compute running balance correctly
         var orderedAsc = txns
             .OrderBy(t => t.PostedDate)
             .ThenBy(t => t.Id)
             .ToList();
 
         decimal running = opening;
+
         var rowsAsc = new List<RegisterRow>(orderedAsc.Count + 1);
 
-        // Synthetic opening balance row
+        // Synthetic opening balance row:
+        // Amount shows opening (so user sees it in Amount column),
+        // Balance also shows opening.
         rowsAsc.Add(new RegisterRow(
             new TransactionModel
             {
                 Id = 0,
                 PostedDate = obDate,
                 Description = "OPENING BALANCE",
-                Amount = 0m,
+                Amount = opening,          // ✅ show opening in Amount column
                 Category = null,
                 CategoryId = null,
                 Memo = null
             },
-            opening
+            balance: opening
         ));
 
         foreach (var t in orderedAsc)
@@ -213,12 +234,16 @@ public sealed partial class RegisterViewModel : ObservableObject
 
         CurrentBalance = running;
 
-        // Clear selection when we refresh the list
+        // Clear selection on refresh
         SelectedRow = null;
+        _lastSelected = null;
 
         ApplyFilter();
     }
 
+    // ------------------------------------------------------------
+    // Filtering
+    // ------------------------------------------------------------
     private void ApplyFilter()
     {
         Items.Clear();
@@ -232,6 +257,7 @@ public sealed partial class RegisterViewModel : ObservableObject
             return;
         }
 
+        // If user types a number, match amount (absolute match too)
         if (TryParseMoneyRobust(raw, out var money))
         {
             var target = Round2(money);
@@ -333,6 +359,7 @@ public sealed partial class RegisterViewModel : ObservableObject
         }
     }
 }
+
 public partial class RegisterRow : ObservableObject
 {
     public TransactionModel Transaction { get; }
@@ -342,7 +369,7 @@ public partial class RegisterRow : ObservableObject
     public decimal Amount => Transaction.Amount;
     public decimal Balance { get; }
 
-    public int RowIndex { get; set; }   // ← ADD THIS
+    public int RowIndex { get; set; }
 
     [ObservableProperty]
     private bool isSelected;

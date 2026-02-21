@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using eFinance.Importing;
+using eFinance.Services;
 using Microsoft.Maui.Storage;
 
 namespace eFinance.ViewModels;
@@ -14,16 +15,18 @@ public sealed partial class ImportFormatsViewModel : ObservableObject
 {
     private readonly ImportPipeline _pipeline;
     private readonly ReadOnlyCollection<IImporter> _importers;
+    private readonly INavigationService _nav;
 
     public ObservableCollection<ImporterRow> Importers { get; } = new();
 
     [ObservableProperty]
     private string lastTestResult = "";
 
-    public ImportFormatsViewModel(ImportPipeline pipeline, IEnumerable<IImporter> importers)
+    public ImportFormatsViewModel(ImportPipeline pipeline, IEnumerable<IImporter> importers, INavigationService nav)
     {
         _pipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
         _importers = (importers ?? throw new ArgumentNullException(nameof(importers))).ToList().AsReadOnly();
+        _nav = nav ?? throw new ArgumentNullException(nameof(nav));
 
         Refresh();
     }
@@ -42,6 +45,9 @@ public sealed partial class ImportFormatsViewModel : ObservableObject
             });
         }
     }
+
+    [RelayCommand]
+    private Task BackAsync() => _nav.GoBackAsync();
 
     [RelayCommand]
     private async Task TestCsvAsync()

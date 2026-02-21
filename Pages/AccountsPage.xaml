@@ -3,13 +3,20 @@
     x:Class="eFinance.Pages.AccountsPage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:conv="clr-namespace:eFinance.Converters"
     Title="Accounts"
     x:Name="ThisPage">
+
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <conv:AmountColorConverter x:Key="AmountColorConverter" />
+        </ResourceDictionary>
+    </ContentPage.Resources>
 
     <Grid RowDefinitions="Auto,*" Padding="12" RowSpacing="10">
 
         <!-- Header + top buttons -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="10">
             <Label Text="Accounts"
                    FontSize="20"
                    FontAttributes="Bold"
@@ -22,11 +29,17 @@
             <Button Grid.Column="2"
                     Text="{Binding ShowInactiveButtonText}"
                     Command="{Binding ToggleInactiveCommand}" />
+
+            <Button Grid.Column="3"
+                    Text="Back"
+                    Style="{StaticResource DangerButtonStyle}"
+                    Command="{Binding BackCommand}" />
         </Grid>
 
         <!-- List -->
         <CollectionView Grid.Row="1"
-                        ItemsSource="{Binding Accounts}"
+                        ItemsSource="{Binding GroupedAccounts}"
+                        IsGrouped="True"
                         SelectionMode="None">
 
             <CollectionView.EmptyView>
@@ -36,11 +49,36 @@
                        Opacity="0.7" />
             </CollectionView.EmptyView>
 
+            <!-- Group header (LIABILITIES / CASH / ASSETS) with group total -->
+            <CollectionView.GroupHeaderTemplate>
+                <DataTemplate>
+                    <Grid Padding="6,10" ColumnDefinitions="*,Auto">
+                        <Label Text="{Binding Title}"
+                               FontAttributes="Bold"
+                               FontSize="14"
+                               Opacity="0.75" />
+
+                        <Label Grid.Column="1"
+                               Text="{Binding TotalText}"
+                               FontAttributes="Bold"
+                               FontSize="14"
+                               HorizontalTextAlignment="End"
+                               Opacity="0.9"
+                               TextColor="{Binding Total, Converter={StaticResource AmountColorConverter}}" />
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.GroupHeaderTemplate>
+
+            <!-- Each item is AccountListItem -->
             <CollectionView.ItemTemplate>
                 <DataTemplate>
                     <Frame Padding="10" CornerRadius="12" HasShadow="True">
-                        <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="10">
-                            <StackLayout Spacing="2">
+                        <Grid ColumnDefinitions="*,Auto,Auto,Auto"
+                              ColumnSpacing="10"
+                              RowDefinitions="Auto,Auto">
+
+                            <!-- Left: Name + Type -->
+                            <StackLayout Grid.RowSpan="2" Spacing="2">
                                 <Label Text="{Binding Name}"
                                        FontAttributes="Bold"
                                        FontSize="16" />
@@ -49,18 +87,28 @@
                                        FontSize="12" />
                             </StackLayout>
 
-                            <Button Grid.Column="1"
+                            <!-- Right top: Balance -->
+                            <Label Grid.Column="1"
+                                   Grid.ColumnSpan="3"
+                                   Text="{Binding BalanceText}"
+                                   FontAttributes="Bold"
+                                   HorizontalTextAlignment="End"
+                                   VerticalTextAlignment="Center"
+                                   TextColor="{Binding Balance, Converter={StaticResource AmountColorConverter}}" />
+
+                            <!-- Right bottom: buttons -->
+                            <Button Grid.Row="1" Grid.Column="1"
                                     Text="Open"
                                     Command="{Binding BindingContext.OpenRegisterCommand, Source={x:Reference ThisPage}}"
                                     CommandParameter="{Binding Id}" />
 
-                            <Button Grid.Column="2"
+                            <Button Grid.Row="1" Grid.Column="2"
                                     Text="Rename"
                                     Command="{Binding BindingContext.RenameAccountCommand, Source={x:Reference ThisPage}}"
                                     CommandParameter="{Binding .}" />
 
                             <!-- Deactivate or Reactivate depending on IsActive -->
-                            <Button Grid.Column="3"
+                            <Button Grid.Row="1" Grid.Column="3"
                                     Command="{Binding BindingContext.ToggleActiveCommand, Source={x:Reference ThisPage}}"
                                     CommandParameter="{Binding .}">
                                 <Button.Triggers>

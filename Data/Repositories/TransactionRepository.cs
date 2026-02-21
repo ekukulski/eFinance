@@ -1,4 +1,8 @@
-﻿using System.Globalization;
+﻿using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Threading.Tasks;
 using eFinance.Data.Models;
 using Microsoft.Data.Sqlite;
 
@@ -28,6 +32,74 @@ namespace eFinance.Data.Repositories
         public TransactionRepository(SqliteDatabase db)
         {
             _db = db ?? throw new ArgumentNullException(nameof(db));
+        }
+
+        // ============================================================
+        // Accounts Page Balances (FIXED)
+        // ============================================================
+
+        /// <summary>
+        /// Returns the account Balance for each accountId:
+        ///     OpeningBalances.Balance + SUM(Transactions.Amount)
+        /// Excludes soft-deleted rows (IsDeleted = 0).
+        ///
+        /// Any accountId not present in the result set will map to 0.
+        /// </summary>
+        public async Task<Dictionary<long, decimal>> GetSumByAccountIdsAsync(IEnumerable<long> accountIds)
+        {
+            if (accountIds is null) throw new ArgumentNullException(nameof(accountIds));
+
+            var ids = accountIds
+                .Distinct()
+                .Where(id => id > 0)
+                .ToArray();
+
+            // Default all requested ids to 0
+            var result = ids.ToDictionary(id => id, _ => 0m);
+
+            if (ids.Length == 0)
+                return result;
+
+            using var conn = _db.OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            // IN ($p0,$p1,...) with parameters
+            var paramNames = new string[ids.Length];
+            for (int i = 0; i < ids.Length; i++)
+            {
+                paramNames[i] = $"$p{i}";
+                cmd.Parameters.AddWithValue(paramNames[i], ids[i]);
+            }
+
+            // IMPORTANT:
+            // We compute balances from Accounts (a) to ensure:
+            // - accounts with zero transactions still return a row
+            // - opening balance (if present) is included
+            //
+            // Balance = COALESCE(ob.Balance,0) + COALESCE(SUM(active txns),0)
+            cmd.CommandText = $@"
+SELECT
+    a.Id AS AccountId,
+    COALESCE(ob.Balance, 0) + COALESCE(SUM(CASE WHEN t.IsDeleted = 0 THEN t.Amount ELSE 0 END), 0) AS Balance
+FROM Accounts a
+LEFT JOIN OpeningBalances ob ON ob.AccountId = a.Id
+LEFT JOIN Transactions t ON t.AccountId = a.Id
+WHERE a.Id IN ({string.Join(",", paramNames)})
+GROUP BY a.Id, ob.Balance;
+";
+
+            using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+            {
+                var accountId = r.GetInt64(0);
+
+                // Amount stored as REAL in this project (bound via (double)t.Amount),
+                // so SUM returns a floating value. Convert carefully.
+                var balanceAsDouble = r.IsDBNull(1) ? 0.0 : r.GetDouble(1);
+                result[accountId] = (decimal)balanceAsDouble;
+            }
+
+            return result;
         }
 
         // ============================================================
@@ -534,6 +606,8 @@ LIMIT 1;
 
         public async Task UpdateAsync(Transaction t)
         {
+            if (t is null) throw new ArgumentNullException(nameof(t));
+
             using var conn = _db.OpenConnection();
             using var cmd = conn.CreateCommand();
 
@@ -705,27 +779,6 @@ LIMIT 1;
 
                 CreatedUtc = DateTime.Parse(r.GetString(12), null, DateTimeStyles.RoundtripKind)
             };
-        }
-        // ------------------------------------------------------------
-        // SOFT DELETE (Deactivate Account)
-        // ------------------------------------------------------------
-        public async Task<bool> DeactivateByIdAsync(long id)
-        {
-            if (id <= 0) throw new ArgumentOutOfRangeException(nameof(id));
-
-            using var conn = _db.OpenConnection();
-            using var cmd = conn.CreateCommand();
-
-            cmd.CommandText = @"
-UPDATE Accounts
-SET IsActive = 0
-WHERE Id = $id;
-SELECT changes();
-";
-            cmd.Parameters.AddWithValue("$id", id);
-
-            var changed = Convert.ToInt64(await cmd.ExecuteScalarAsync() ?? 0L, CultureInfo.InvariantCulture);
-            return changed > 0;
         }
     }
 }

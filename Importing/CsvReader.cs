@@ -1,4 +1,9 @@
-﻿using System.Text;
+﻿using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using CsvHelper;
+using CsvHelper.Configuration;
 
 namespace eFinance.Importing
 {
@@ -7,91 +12,63 @@ namespace eFinance.Importing
         public static IEnumerable<CsvRow> Read(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath))
-                throw new ArgumentException("File path is required.", nameof(filePath));
+                yield break;
 
-            using var fs = File.OpenRead(filePath);
-            using var sr = new StreamReader(fs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            if (!File.Exists(filePath))
+                yield break;
+
+            var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+            {
+                HasHeaderRecord = true,
+                IgnoreBlankLines = true,
+
+                // Prevent CsvHelper from throwing for small irregularities
+                BadDataFound = null,
+                MissingFieldFound = null,
+                HeaderValidated = null,
+
+                // Trim headers/fields
+                TrimOptions = TrimOptions.Trim,
+
+                // Normalize header matching (so "POSTED DATE" == "Posted Date" etc.)
+                PrepareHeaderForMatch = args => (args.Header ?? "").Trim(),
+            };
+
+            using var stream = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var reader = new StreamReader(stream);
+            using var csv = new CsvHelper.CsvReader(reader, config);
 
             // Read header
-            var headerLine = sr.ReadLine();
-            if (string.IsNullOrWhiteSpace(headerLine))
+            if (!csv.Read())
                 yield break;
 
-            // Split + normalize headers
-            var rawHeaders = SplitCsvLine(headerLine);
-            var headers = rawHeaders
-                .Select(h => CsvRow.Normalize(h))
-                .Where(h => !string.IsNullOrWhiteSpace(h))
-                .ToList();
+            csv.ReadHeader();
+            var headers = csv.HeaderRecord ?? Array.Empty<string>();
 
-            if (headers.Count == 0)
-                yield break;
+            int line = 1; // header line
 
-            while (!sr.EndOfStream)
+            while (csv.Read())
             {
-                var line = sr.ReadLine();
-                if (string.IsNullOrWhiteSpace(line))
-                    continue;
-
-                var cells = SplitCsvLine(line);
+                line++;
 
                 var dict = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-
-                // Map header -> cell; if the row is short, fill nulls
-                for (int i = 0; i < headers.Count; i++)
+                foreach (var h in headers)
                 {
-                    var key = headers[i];
-                    string? value = i < cells.Count ? cells[i] : null;
-
-                    // Keep raw value but trim common whitespace noise
-                    dict[key] = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-                }
-
-                yield return new CsvRow(dict);
-            }
-        }
-
-        // Minimal CSV splitter: handles quoted fields and commas inside quotes.
-        private static List<string> SplitCsvLine(string line)
-        {
-            var result = new List<string>();
-            if (line is null) return result;
-
-            var cur = new StringBuilder();
-            bool inQuotes = false;
-
-            for (int i = 0; i < line.Length; i++)
-            {
-                char c = line[i];
-
-                if (c == '"')
-                {
-                    // Escaped quote inside quoted field ("")
-                    if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
+                    try
                     {
-                        cur.Append('"');
-                        i++;
+                        dict[h] = csv.GetField(h);
                     }
-                    else
+                    catch
                     {
-                        inQuotes = !inQuotes;
+                        dict[h] = null;
                     }
-
-                    continue;
                 }
 
-                if (c == ',' && !inQuotes)
-                {
-                    result.Add(cur.ToString());
-                    cur.Clear();
-                    continue;
-                }
+                // RawRecord includes the exact original line text from the parser
+                var raw = csv.Context?.Parser?.RawRecord ?? "";
 
-                cur.Append(c);
+                yield return new CsvRow(dict, line, raw);
             }
-
-            result.Add(cur.ToString());
-            return result;
         }
     }
 }

@@ -1,44 +1,43 @@
-﻿namespace eFinance.Importing
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace eFinance.Importing
 {
     public sealed class CsvRow
     {
         private readonly Dictionary<string, string?> _values;
 
-        public CsvRow(Dictionary<string, string?> values)
+        public CsvRow(Dictionary<string, string?> values, int lineNumber, string rawLine)
         {
-            _values = values ?? new Dictionary<string, string?>();
+            _values = values ?? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            LineNumber = lineNumber;
+            RawLine = rawLine ?? "";
         }
 
-        public bool TryGet(string header, out string? value) =>
-            _values.TryGetValue(Normalize(header), out value);
+        public int LineNumber { get; }
+        public string RawLine { get; }
 
-        // ✅ Add: Get single header (matches how some of your code is calling it)
-        public string? Get(string header)
+        public string? Get(string name)
         {
-            if (string.IsNullOrWhiteSpace(header))
-                return null;
-
-            return _values.TryGetValue(Normalize(header), out var v) ? v : null;
+            if (string.IsNullOrWhiteSpace(name)) return null;
+            return _values.TryGetValue(name, out var v) ? v : null;
         }
 
-        // ✅ Add: Get with default
-        public string Get(string header, string defaultValue)
+        // Your importers already call GetFirst(...), keep it
+        public string? GetFirst(params string[] names)
         {
-            var v = Get(header);
-            return string.IsNullOrWhiteSpace(v) ? defaultValue : v!;
-        }
-
-        public string? GetFirst(params string[] headers)
-        {
-            foreach (var h in headers)
+            foreach (var n in names ?? Array.Empty<string>())
             {
-                if (_values.TryGetValue(Normalize(h), out var v) && !string.IsNullOrWhiteSpace(v))
+                var v = Get(n);
+                if (!string.IsNullOrWhiteSpace(v))
                     return v;
             }
             return null;
         }
 
-        internal static string Normalize(string s) =>
-            (s ?? string.Empty).Trim().Trim('"').ToLowerInvariant();
+        // Helpful for debugging
+        public override string ToString()
+            => $"Line {LineNumber}: {RawLine}";
     }
 }

@@ -1,381 +1,216 @@
 ﻿using Microsoft.Data.Sqlite;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading.Tasks;
 
-namespace eFinance.Data
+namespace eFinance.Data;
+
+public sealed class SqliteDatabase
 {
-    /// <summary>
-    /// Owns the SQLite file, opens connections, and ensures schema exists.
-    /// Keep all schema creation/migrations here so it’s easy to audit.
-    /// </summary>
-    public sealed class SqliteDatabase
+    private readonly string _dbPath;
+
+    public SqliteDatabase(string dbPath)
     {
-        private readonly string _dbPath;
+        _dbPath = dbPath ?? throw new ArgumentNullException(nameof(dbPath));
+    }
 
-        public SqliteDatabase(string dbPath)
-        {
-            _dbPath = dbPath ?? throw new ArgumentNullException(nameof(dbPath));
-        }
+    // Used by other parts of your app
+    public string DatabasePath => _dbPath;
 
-        public string DatabasePath => _dbPath;
+    public static string DefaultDbPath(string appName)
+    {
+        var dir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            appName);
 
-        public SqliteConnection OpenConnection()
-        {
-            var cs = new SqliteConnectionStringBuilder
-            {
-                DataSource = _dbPath,
-                Mode = SqliteOpenMode.ReadWriteCreate,
-                Cache = SqliteCacheMode.Shared,
-            }.ToString();
+        Directory.CreateDirectory(dir);
+        return Path.Combine(dir, "eFinance.db");
+    }
 
-            var conn = new SqliteConnection(cs);
-            conn.Open();
+    public SqliteConnection OpenConnection()
+    {
+        var conn = new SqliteConnection($"Data Source={_dbPath}");
+        conn.Open();
+        return conn;
+    }
 
-            // Good defaults for finance data: integrity + better concurrency.
-            using (var pragma = conn.CreateCommand())
-            {
-                pragma.CommandText = @"
-PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = WAL;
-PRAGMA synchronous = NORMAL;
-";
-                pragma.ExecuteNonQuery();
-            }
+    public async Task InitializeAsync()
+    {
+        using var conn = OpenConnection();
 
-            return conn;
-        }
-
-        public async Task InitializeAsync()
-        {
-            EnsureFolderExists(_dbPath);
-
-            using var conn = OpenConnection();
-            using var cmd = conn.CreateCommand();
-
-            // ---- Base schema (create tables if missing) ----
-            cmd.CommandText = @"
--- ------------------------------------------------------------
--- Accounts
--- ------------------------------------------------------------
+        // ------------------------------------------------------------
+        // Base schema
+        // ------------------------------------------------------------
+        await ExecuteAsync(conn, @"
 CREATE TABLE IF NOT EXISTS Accounts (
     Id              INTEGER PRIMARY KEY AUTOINCREMENT,
     Name            TEXT NOT NULL,
     CreatedUtc      TEXT NOT NULL,
     AccountType     TEXT NOT NULL DEFAULT 'Checking',
     IsActive        INTEGER NOT NULL DEFAULT 1
-);
+);");
 
--- ------------------------------------------------------------
--- Transactions
--- NOTE: We keep your original Category TEXT column for compatibility,
--- but going forward you should use CategoryId (FK to Categories).
--- ------------------------------------------------------------
+        await ExecuteAsync(conn, @"
 CREATE TABLE IF NOT EXISTS Transactions (
-    Id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    AccountId       INTEGER NOT NULL,
-    PostedDate      TEXT NOT NULL,          -- ISO-8601 date string: yyyy-MM-dd
-    Description     TEXT NOT NULL,
-    Amount          REAL NOT NULL,          -- positive/negative per your convention
-    Category        TEXT NULL,              -- legacy/temporary
-    Memo            TEXT NULL,
-    FitId           TEXT NULL,              -- import unique id, optional
-    Source          TEXT NULL,              -- e.g., 'AMEX'
-    CreatedUtc      TEXT NOT NULL,
+    Id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    AccountId            INTEGER NOT NULL,
+    PostedDate           TEXT NOT NULL,
+    Description          TEXT NOT NULL,
+    Amount               REAL NOT NULL,
+    Category             TEXT NULL,
+    CategoryId           INTEGER NULL,
+    Memo                 TEXT NULL,
+    FitId                TEXT NULL,
+    Source               TEXT NULL,
+    CreatedUtc           TEXT NOT NULL,
+    IsDeleted            INTEGER NOT NULL DEFAULT 0,
+    DeletedUtc           TEXT NULL,
+    MatchedRuleId        INTEGER NULL,
+    MatchedRulePattern   TEXT NULL,
+    CategorizedUtc       TEXT NULL
+);");
 
-    FOREIGN KEY(AccountId) REFERENCES Accounts(Id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS IX_Transactions_AccountId_PostedDate
-ON Transactions(AccountId, PostedDate);
-
-CREATE UNIQUE INDEX IF NOT EXISTS UX_Transactions_AccountId_FitId
-ON Transactions(AccountId, FitId)
-WHERE FitId IS NOT NULL AND FitId <> '';
-
--- ------------------------------------------------------------
--- Opening Balances
--- ------------------------------------------------------------
+        await ExecuteAsync(conn, @"
 CREATE TABLE IF NOT EXISTS OpeningBalances (
-    Id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    AccountName   TEXT NOT NULL,        -- e.g. 'Amex'
-    BalanceDate   TEXT NOT NULL,        -- yyyy-MM-dd
-    Balance       REAL NOT NULL,
-    CreatedUtc    TEXT NOT NULL
-);
+    Id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    AccountName TEXT NOT NULL,
+    BalanceDate TEXT NOT NULL,
+    Balance     REAL NOT NULL,
+    CreatedUtc  TEXT NOT NULL
+);");
 
-CREATE UNIQUE INDEX IF NOT EXISTS UX_OpeningBalances_AccountName
-ON OpeningBalances(AccountName);
-
--- ------------------------------------------------------------
--- Categories (master list)
--- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS Categories (
-    Id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    Name            TEXT NOT NULL,
-    IsActive        INTEGER NOT NULL DEFAULT 1,
-    CreatedUtc      TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
-    UpdatedUtc      TEXT NULL
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS UX_Categories_Name
-ON Categories(Name);
-
--- ------------------------------------------------------------
--- CategoryRules (auto-categorization)
--- ------------------------------------------------------------
+        // ------------------------------------------------------------
+        // CategoryRules
+        // NOTE: Keep ONLY if this is truly your schema/table.
+        // If your project already created this table elsewhere, you can remove this block safely.
+        // ------------------------------------------------------------
+        await ExecuteAsync(conn, @"
 CREATE TABLE IF NOT EXISTS CategoryRules (
     Id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     DescriptionPattern   TEXT NOT NULL,
     CategoryId           INTEGER NOT NULL,
-    MatchType            TEXT NOT NULL DEFAULT 'Contains', -- Exact / StartsWith / Contains
-    Priority             INTEGER NOT NULL DEFAULT 100,
-    IsEnabled            INTEGER NOT NULL DEFAULT 1,
-    Notes                TEXT NULL,
-    CreatedUtc           TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
-    UpdatedUtc           TEXT NULL,
+    MatchType            TEXT NOT NULL DEFAULT 'Contains',
+    Priority             INTEGER NOT NULL DEFAULT 0,
+    IsEnabled            INTEGER NOT NULL DEFAULT 1
+);");
 
-    FOREIGN KEY(CategoryId) REFERENCES Categories(Id) ON DELETE RESTRICT
-);
+        // ------------------------------------------------------------
+        // Migrations / upgrades (Option A)
+        // ------------------------------------------------------------
 
-CREATE INDEX IF NOT EXISTS IX_CategoryRules_Enabled_Priority
-ON CategoryRules(IsEnabled, Priority);
+        // 1) Add AccountId column if missing (nullable is safest for existing DBs)
+        await EnsureColumnAsync(conn, "OpeningBalances", "AccountId", "INTEGER NULL");
 
-CREATE INDEX IF NOT EXISTS IX_CategoryRules_CategoryId
-ON CategoryRules(CategoryId);
-";
-            await cmd.ExecuteNonQueryAsync();
+        // 2) Backfill AccountId from AccountName (only for rows missing it)
+        var updated = await BackfillOpeningBalanceAccountIdsAsync(conn);
 
-            // ------------------------------------------------------------
-            // Duplicate audit ignores (persist "Accept (not a duplicate)")
-            // ------------------------------------------------------------
-            await ExecuteNonQueryAsync(conn, @"
-CREATE TABLE IF NOT EXISTS DuplicateAuditIgnores (
-    A_TransactionId INTEGER NOT NULL,
-    B_TransactionId INTEGER NOT NULL,
-    Reason          TEXT NULL,
-    CreatedUtc      TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+        // 3) Index for fast lookups
+        await EnsureIndexAsync(conn, "IX_OpeningBalances_AccountId", "OpeningBalances(AccountId)");
 
-    PRIMARY KEY (A_TransactionId, B_TransactionId)
-);
-
-CREATE INDEX IF NOT EXISTS IX_DuplicateAuditIgnores_A
-ON DuplicateAuditIgnores(A_TransactionId);
-
-CREATE INDEX IF NOT EXISTS IX_DuplicateAuditIgnores_B
-ON DuplicateAuditIgnores(B_TransactionId);
-");
-
-            // ---- Migrations / upgrades for existing DBs ----
-            // Add new columns to Transactions if missing.
-            await EnsureColumnAsync(conn, "Transactions", "CategoryId", "INTEGER NULL");
-            await EnsureColumnAsync(conn, "Transactions", "MatchedRuleId", "INTEGER NULL");
-            await EnsureColumnAsync(conn, "Transactions", "MatchedRulePattern", "TEXT NULL");
-            await EnsureColumnAsync(conn, "Transactions", "CategorizedUtc", "TEXT NULL");
-            await EnsureColumnAsync(conn, "Transactions", "Memo", "TEXT NULL");
-            await EnsureColumnAsync(conn, "Transactions", "IsDeleted", "INTEGER NOT NULL DEFAULT 0");
-            await EnsureColumnAsync(conn, "Accounts", "AccountType", "TEXT NOT NULL DEFAULT 'Checking'");
-            await EnsureColumnAsync(conn, "Accounts", "IsActive", "INTEGER NOT NULL DEFAULT 1");
-
-            // Helpful indexes for the new columns
-            await ExecuteNonQueryAsync(conn, @"
-CREATE INDEX IF NOT EXISTS IX_Transactions_CategoryId
-ON Transactions(CategoryId);
-
-CREATE INDEX IF NOT EXISTS IX_Transactions_MatchedRuleId
-ON Transactions(MatchedRuleId);
-");
-
-            // Optional: prevent exact duplicates in rules (pattern + category + matchtype)
-            // Keep this if you want the DB to enforce cleanliness.
-            await ExecuteNonQueryAsync(conn, @"
-CREATE UNIQUE INDEX IF NOT EXISTS UX_CategoryRules_UniqueRule
-ON CategoryRules(DescriptionPattern, CategoryId, MatchType);
-");
-
-            // ---- One-time seeding / migrations from legacy CSV files ----
-            await SeedCategoriesFromLegacyCsvIfNeededAsync(conn);
-            await BackfillTransactionCategoryIdsFromLegacyCategoryTextAsync(conn);
-        }
-
-        private static async Task SeedCategoriesFromLegacyCsvIfNeededAsync(SqliteConnection conn)
-        {
-            // If Categories already has data, don't touch it.
-            using (var countCmd = conn.CreateCommand())
-            {
-                countCmd.CommandText = "SELECT COUNT(*) FROM Categories;";
-                var count = (long)(await countCmd.ExecuteScalarAsync() ?? 0L);
-                if (count > 0)
-                    return;
-            }
-
-            // Attempt to load legacy CategoryList.csv into Categories.
-            var legacyPath = FilePathHelper.GeteFinancePath("CategoryList.csv");
-            if (!File.Exists(legacyPath))
-                return;
-
-            var lines = File.ReadAllLines(legacyPath)
-                .Select(l => (l ?? string.Empty).Trim())
-                .Where(l => !string.IsNullOrWhiteSpace(l))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(l => l)
-                .ToList();
-
-            if (lines.Count == 0)
-                return;
-
-            using var tx = conn.BeginTransaction();
-            using var insert = conn.CreateCommand();
-            insert.Transaction = tx;
-            insert.CommandText = @"
-INSERT OR IGNORE INTO Categories (Name, IsActive, CreatedUtc)
-VALUES ($name, 1, $utc);
-";
-            var pName = insert.CreateParameter(); pName.ParameterName = "$name"; insert.Parameters.Add(pName);
-            var pUtc = insert.CreateParameter(); pUtc.ParameterName = "$utc"; insert.Parameters.Add(pUtc);
-
-            foreach (var name in lines)
-            {
-                pName.Value = name;
-                pUtc.Value = DateTime.UtcNow.ToString("O");
-                await insert.ExecuteNonQueryAsync();
-            }
-
-            tx.Commit();
-        }
-
-        private static async Task BackfillTransactionCategoryIdsFromLegacyCategoryTextAsync(SqliteConnection conn)
-        {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = @"
-UPDATE Transactions
-SET CategoryId = (
-    SELECT c.Id
-    FROM Categories c
-    WHERE LOWER(TRIM(c.Name)) = LOWER(TRIM(Transactions.Category))
-    LIMIT 1
-)
-WHERE CategoryId IS NULL
-  AND Category IS NOT NULL
-  AND TRIM(Category) <> ''
-  AND EXISTS (
-    SELECT 1
-    FROM Categories c
-    WHERE LOWER(TRIM(c.Name)) = LOWER(TRIM(Transactions.Category))
-  );
-";
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        // -----------------------------
-        // Data access: Category rules
-        // -----------------------------
-        public async Task<List<CategoryRuleRecord>> GetCategoryRulesAsync(bool enabledOnly = true)
-        {
-            using var conn = OpenConnection();
-            using var cmd = conn.CreateCommand();
-
-            cmd.CommandText = enabledOnly
-                ? @"SELECT Id, DescriptionPattern, CategoryId, MatchType, Priority, IsEnabled
-                    FROM CategoryRules
-                    WHERE IsEnabled = 1
-                    ORDER BY Priority DESC, LENGTH(DescriptionPattern) DESC;"
-                : @"SELECT Id, DescriptionPattern, CategoryId, MatchType, Priority, IsEnabled
-                    FROM CategoryRules
-                    ORDER BY Priority DESC, LENGTH(DescriptionPattern) DESC;";
-
-            var list = new List<CategoryRuleRecord>();
-            using var reader = await cmd.ExecuteReaderAsync();
-
-            while (await reader.ReadAsync())
-            {
-                list.Add(new CategoryRuleRecord
-                {
-                    Id = reader.GetInt32(0),
-                    DescriptionPattern = reader.GetString(1),
-                    CategoryId = reader.GetInt32(2),
-                    MatchType = reader.GetString(3),
-                    Priority = reader.GetInt32(4),
-                    IsEnabled = reader.GetInt32(5),
-                });
-            }
-
-            return list;
-        }
-
-        // -----------------------------
-        // Helpers / migrations
-        // -----------------------------
-        private static async Task EnsureColumnAsync(SqliteConnection conn, string table, string column, string definition)
-        {
-            // Check existing columns
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = $"PRAGMA table_info({table});";
-
-            var exists = false;
-            using (var reader = await cmd.ExecuteReaderAsync())
-            {
-                while (await reader.ReadAsync())
-                {
-                    var name = reader.GetString(reader.GetOrdinal("name"));
-                    if (string.Equals(name, column, StringComparison.OrdinalIgnoreCase))
-                    {
-                        exists = true;
-                        break;
-                    }
-                }
-            }
-
-            if (exists) return;
-
-            using var alter = conn.CreateCommand();
-            alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition};";
-            await alter.ExecuteNonQueryAsync();
-        }
-
-        private static async Task<bool> ColumnExistsAsync(SqliteConnection conn, string table, string column)
-        {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = $"PRAGMA table_info({table});";
-
-            using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                var colName = reader.GetString(1); // PRAGMA table_info: name at index 1
-                if (string.Equals(colName, column, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-
-            return false;
-        }
-
-        private static async Task ExecuteNonQueryAsync(SqliteConnection conn, string sql)
-        {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = sql;
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        private static void EnsureFolderExists(string dbPath)
-        {
-            var folder = Path.GetDirectoryName(dbPath);
-            if (!string.IsNullOrWhiteSpace(folder) && !Directory.Exists(folder))
-                Directory.CreateDirectory(folder);
-        }
-
-        public static string DefaultDbPath(string appName = "eFinance")
-        {
-            // Windows-friendly location: %LocalAppData%\eFinance\eFinance.db
-            var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            return Path.Combine(baseDir, appName, $"{appName}.db");
-        }
+        System.Diagnostics.Debug.WriteLine(
+            $"DB init complete. OpeningBalances.AccountId backfilled rows={updated}");
     }
 
-    // Simple DTO for reading rules from SQLite (used by CategorizationService)
-    public sealed class CategoryRuleRecord
+    // ------------------------------------------------------------
+    // CategoryRules API used by CategorizationService
+    // ------------------------------------------------------------
+    public async Task<List<CategoryRuleRow>> GetCategoryRulesAsync(bool enabledOnly)
+    {
+        using var conn = OpenConnection();
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = enabledOnly
+            ? @"SELECT Id, DescriptionPattern, CategoryId, MatchType, Priority, IsEnabled
+                FROM CategoryRules
+                WHERE IsEnabled = 1
+                ORDER BY Priority DESC, Id ASC;"
+            : @"SELECT Id, DescriptionPattern, CategoryId, MatchType, Priority, IsEnabled
+                FROM CategoryRules
+                ORDER BY Priority DESC, Id ASC;";
+
+        var list = new List<CategoryRuleRow>();
+
+        using var r = await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+        {
+            list.Add(new CategoryRuleRow
+            {
+                Id = r.GetInt32(0),
+                DescriptionPattern = r.IsDBNull(1) ? "" : r.GetString(1),
+                CategoryId = r.GetInt32(2),
+                MatchType = r.IsDBNull(3) ? "Contains" : r.GetString(3),
+                Priority = r.IsDBNull(4) ? 0 : r.GetInt32(4),
+                IsEnabled = r.IsDBNull(5) ? 1 : r.GetInt32(5),
+            });
+        }
+
+        return list;
+    }
+    public sealed class CategoryRuleRow
     {
         public int Id { get; set; }
-        public string DescriptionPattern { get; set; } = string.Empty;
+        public string DescriptionPattern { get; set; } = "";
         public int CategoryId { get; set; }
         public string MatchType { get; set; } = "Contains";
-        public int Priority { get; set; } = 100;
-        public int IsEnabled { get; set; } = 1;
+        public int Priority { get; set; }
+        public int IsEnabled { get; set; }
+    }
+
+    // ------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------
+    private static async Task ExecuteAsync(SqliteConnection conn, string sql)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static async Task EnsureColumnAsync(SqliteConnection conn, string table, string column, string definition)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"PRAGMA table_info({table});";
+
+        using var r = await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+        {
+            var name = r.GetString(1);
+            if (string.Equals(name, column, StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+
+        using var add = conn.CreateCommand();
+        add.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition};";
+        await add.ExecuteNonQueryAsync();
+    }
+
+    private static async Task EnsureIndexAsync(SqliteConnection conn, string indexName, string onClause)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"CREATE INDEX IF NOT EXISTS {indexName} ON {onClause};";
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    /// Returns number of rows updated.
+    /// </summary>
+    private static async Task<int> BackfillOpeningBalanceAccountIdsAsync(SqliteConnection conn)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+UPDATE OpeningBalances
+SET AccountId = (
+    SELECT a.Id
+    FROM Accounts a
+    WHERE TRIM(a.Name) = TRIM(OpeningBalances.AccountName) COLLATE NOCASE
+    LIMIT 1
+)
+WHERE AccountId IS NULL
+  AND AccountName IS NOT NULL
+  AND TRIM(AccountName) <> '';
+";
+        var rows = await cmd.ExecuteNonQueryAsync();
+        return rows;
     }
 }

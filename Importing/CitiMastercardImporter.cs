@@ -138,11 +138,11 @@ namespace eFinance.Importing
         private static string NormalizeKeyText(string? text)
         {
             if (string.IsNullOrWhiteSpace(text))
-                return string.Empty;
+                return "";
 
-            var s = text.Trim();
-            while (s.Contains("  ", StringComparison.Ordinal))
-                s = s.Replace("  ", " ", StringComparison.Ordinal);
+            var s = text.Trim().ToLowerInvariant();
+
+            s = System.Text.RegularExpressions.Regex.Replace(s, @"\s+", " ");
 
             return s;
         }

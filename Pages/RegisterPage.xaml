@@ -164,7 +164,7 @@
 
                 <VerticalStackLayout Spacing="6">
 
-                    <Grid ColumnDefinitions="110,*,180,120,120">
+                    <Grid ColumnDefinitions="110,2*,1.5*,120,120">
 
                         <Label Text="DATE" Style="{StaticResource RegisterHeaderLabelStyle}" />
                         <Label Grid.Column="1" Text="DESCRIPTION" Style="{StaticResource RegisterHeaderLabelStyle}" />
@@ -215,7 +215,7 @@
                                 </DataTrigger>
                             </Border.Triggers>
 
-                            <Grid ColumnDefinitions="110,*,180,120,120"
+                            <Grid ColumnDefinitions="110,2*,1.5*,120,120"
                                   HorizontalOptions="FillAndExpand">
 
                                 <Label Text="{Binding PostedDate}"

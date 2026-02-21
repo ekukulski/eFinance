@@ -11,36 +11,98 @@ namespace eFinance.ViewModels;
 public sealed partial class AccountsViewModel : ObservableObject
 {
     private readonly AccountRepository _accounts;
+    private readonly TransactionRepository _transactions;
+    private readonly OpeningBalanceRepository _openingBalances;
     private readonly INavigationService _nav;
     private readonly IDialogService _dialogs;
 
-    public ObservableCollection<Account> Accounts { get; } = new();
+    public ObservableCollection<AccountGroup> GroupedAccounts { get; } = new();
 
     [ObservableProperty]
     private bool showInactive;
 
     public string ShowInactiveButtonText => ShowInactive ? "Hide Inactive" : "Show Inactive";
 
-    public AccountsViewModel(AccountRepository accounts, INavigationService nav, IDialogService dialogs)
+    public AccountsViewModel(
+        AccountRepository accounts,
+        TransactionRepository transactions,
+        OpeningBalanceRepository openingBalances,
+        INavigationService nav,
+        IDialogService dialogs)
     {
         _accounts = accounts ?? throw new ArgumentNullException(nameof(accounts));
+        _transactions = transactions ?? throw new ArgumentNullException(nameof(transactions));
+        _openingBalances = openingBalances ?? throw new ArgumentNullException(nameof(openingBalances));
         _nav = nav ?? throw new ArgumentNullException(nameof(nav));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
     }
 
+    // ------------------------------------------------------------
+    // Load + Group + Balance
+    // ------------------------------------------------------------
     [RelayCommand]
     public async Task LoadAsync()
     {
-        Accounts.Clear();
+        try
+        {
+            var accounts = ShowInactive
+                ? await _accounts.GetAllAsync()
+                : await _accounts.GetAllActiveAsync();
 
-        var list = ShowInactive
-            ? await _accounts.GetAllAsync()
-            : await _accounts.GetAllActiveAsync();
+            var ids = accounts.Select(a => a.Id).Where(id => id > 0).Distinct().ToArray();
 
-        foreach (var a in list)
-            Accounts.Add(a);
+            Dictionary<long, decimal> txnSums = new();
+            Dictionary<long, decimal> openings = new();
 
-        OnPropertyChanged(nameof(ShowInactiveButtonText));
+            try
+            {
+                txnSums = await _transactions.GetSumByAccountIdsAsync(ids);
+            }
+            catch
+            {
+                txnSums = ids.ToDictionary(id => id, _ => 0m);
+            }
+
+            try
+            {
+                openings = await _openingBalances.GetOpeningByAccountIdsAsync(ids);
+            }
+            catch
+            {
+                openings = ids.ToDictionary(id => id, _ => 0m);
+            }
+
+            AccountListItem ToItem(Account a)
+            {
+                openings.TryGetValue(a.Id, out var open);
+                txnSums.TryGetValue(a.Id, out var sum);
+                return new AccountListItem(a, open + sum);
+            }
+
+            var items = accounts.Select(ToItem).ToList();
+
+            var liabilities = items.Where(i => i.AccountType == "CreditCard");
+            var cash = items.Where(i =>
+                i.AccountType == "Checking" ||
+                i.AccountType == "Savings" ||
+                i.AccountType == "CD");
+
+            var assets = items.Where(i => i.AccountType == "Investment");
+            var other = items.Except(liabilities).Except(cash).Except(assets);
+
+            GroupedAccounts.Clear();
+
+            if (liabilities.Any()) GroupedAccounts.Add(new AccountGroup("LIABILITIES", liabilities));
+            if (cash.Any()) GroupedAccounts.Add(new AccountGroup("CASH", cash));
+            if (assets.Any()) GroupedAccounts.Add(new AccountGroup("ASSETS", assets));
+            if (other.Any()) GroupedAccounts.Add(new AccountGroup("OTHER", other));
+
+            OnPropertyChanged(nameof(ShowInactiveButtonText));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"AccountsViewModel error: {ex}");
+        }
     }
 
     [RelayCommand]
@@ -51,6 +113,9 @@ public sealed partial class AccountsViewModel : ObservableObject
         await LoadAsync();
     }
 
+    // ------------------------------------------------------------
+    // Navigation
+    // ------------------------------------------------------------
     [RelayCommand]
     private async Task OpenRegisterAsync(long accountId)
     {
@@ -58,25 +123,24 @@ public sealed partial class AccountsViewModel : ObservableObject
         await _nav.GoToAsync($"{nameof(RegisterPage)}?accountId={accountId}");
     }
 
+    // ------------------------------------------------------------
+    // Account CRUD
+    // ------------------------------------------------------------
     [RelayCommand]
     private async Task AddAccountAsync()
     {
         var name = await _dialogs.PromptAsync("New Account", "Account name:");
         if (string.IsNullOrWhiteSpace(name)) return;
 
-        // Your IDialogService does NOT have PickAsync, so use PromptAsync
         var type = await _dialogs.PromptAsync(
             "Account Type",
-            "Enter type (Checking, Savings, CreditCard):",
+            "Enter type (Checking, Savings, CD, CreditCard, Investment):",
             "Checking");
 
         if (string.IsNullOrWhiteSpace(type))
             type = "Checking";
 
-        type = type.Trim();
-        if (type.Equals("credit card", StringComparison.OrdinalIgnoreCase) ||
-            type.Equals("creditcard", StringComparison.OrdinalIgnoreCase))
-            type = "CreditCard";
+        type = NormalizeAccountType(type);
 
         var account = new Account
         {
@@ -91,8 +155,9 @@ public sealed partial class AccountsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task RenameAccountAsync(Account? account)
+    private async Task RenameAccountAsync(AccountListItem? item)
     {
+        var account = item?.Account;
         if (account is null || account.Id <= 0) return;
 
         var newName = await _dialogs.PromptAsync("Rename Account", "New account name:", account.Name);
@@ -107,8 +172,9 @@ public sealed partial class AccountsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task ToggleActiveAsync(Account? account)
+    private async Task ToggleActiveAsync(AccountListItem? item)
     {
+        var account = item?.Account;
         if (account is null || account.Id <= 0) return;
 
         if (account.IsActive)
@@ -131,5 +197,39 @@ public sealed partial class AccountsViewModel : ObservableObject
         }
 
         await LoadAsync();
+    }
+
+    [RelayCommand]
+    private Task BackAsync() => _nav.GoBackAsync();
+
+    // ------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------
+    private static string NormalizeAccountType(string raw)
+    {
+        var t = raw.Trim();
+
+        // Normalize common variants
+        if (t.Equals("credit card", StringComparison.OrdinalIgnoreCase) ||
+            t.Equals("creditcard", StringComparison.OrdinalIgnoreCase) ||
+            t.Equals("cc", StringComparison.OrdinalIgnoreCase))
+            return "CreditCard";
+
+        if (t.Equals("checking", StringComparison.OrdinalIgnoreCase))
+            return "Checking";
+
+        if (t.Equals("savings", StringComparison.OrdinalIgnoreCase))
+            return "Savings";
+
+        if (t.Equals("cd", StringComparison.OrdinalIgnoreCase) ||
+            t.Equals("certificate of deposit", StringComparison.OrdinalIgnoreCase))
+            return "CD";
+
+        if (t.Equals("investment", StringComparison.OrdinalIgnoreCase) ||
+            t.Equals("brokerage", StringComparison.OrdinalIgnoreCase))
+            return "Investment";
+
+        // Keep unknown types, but trimmed
+        return t;
     }
 }

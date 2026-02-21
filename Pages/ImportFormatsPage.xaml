@@ -7,8 +7,18 @@
 
     <Grid RowDefinitions="Auto,*,Auto" Padding="12" RowSpacing="10">
 
-        <Button Text="Test CSV..."
-                Command="{Binding TestCsvCommand}" />
+        <!-- Top buttons -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,*" ColumnSpacing="10">
+            <Button Grid.Column="0"
+                    Text="Test CSV"
+                    Style="{StaticResource NeutralButtonStyle}"
+                    Command="{Binding TestCsvCommand}" />
+
+            <Button Grid.Column="1"
+                    Text="Back"
+                    Style="{StaticResource DangerButtonStyle}"
+                    Command="{Binding BackCommand}" />
+        </Grid>
 
         <CollectionView Grid.Row="1"
                         ItemsSource="{Binding Importers}">
